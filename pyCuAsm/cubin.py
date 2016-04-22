@@ -428,7 +428,7 @@ class Cubin():
                             else:
                                 print("Unknown Code 0x%02x (size:%d)" % (code, size))
                                 
-                        kernelSection['Parameter'] = params
+                        kernelSection['Parameters'] = params
                         kernelSection['ParameterCount'] = len(params)   
                         
                         paramSec['StaticParams'] = staticParams
