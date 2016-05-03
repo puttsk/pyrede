@@ -2,6 +2,7 @@ import argparse
 import subprocess
 import sys
 
+from pyCuAsm.pycuasm import *
 from pyCuAsm.cubin import Cubin
 
 def printCubinInfo(cubin_file, cubin):
@@ -64,6 +65,7 @@ def main():
             outputFile.write("#\t" + param + "\n")
         outputFile.write("# Instructions:\n\n")
         
+        extract(cuobjdumpSass, outputFile, kernel['Parameters']) 
         
     else:
         parser.print_help()
