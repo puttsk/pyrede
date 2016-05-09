@@ -6,9 +6,23 @@ REL_OFFSETS = ['BRA', 'SSY', 'CAL', 'PBK', 'PCNT']
 ABS_OFFSETS = ['JCAL']
 JUMP_OPS = REL_OFFSETS + ABS_OFFSETS
 
+Instruction = namedtuple('Inst', ['line', 'pred', 'opcode', 'inst', 'raw', 'flag'])
+"""
+Instruction class.
+
+Fields:
+    'num': SASS line number
+    'pred': Predicate
+    'op': Instruction operator
+    'ins': Instruction string
+    'code': Instruction in raw format
+    'flag': Control flags
+"""
+
+
 def isSassCtrlLine(line):
     """
-    Check if the input line is control instruction
+    Check if the input line is control instruction.
     
     Args:
         line (str): a SASS line from cuobjdump
@@ -25,8 +39,8 @@ def isSassCtrlLine(line):
 
 def processSassCtrlFlags(line):
     """
-    Extract control and reuse flags from SASS control instruction
-    
+    Extract control and reuse flags from SASS control instruction.
+        
     Args:
         line (str): a SASS control line from cuobjdump
     
@@ -62,44 +76,60 @@ def processSassCtrlFlags(line):
 
 def processSassLine(line):
     """
-    Extract SASS instruction from SASS code
+    Extract SASS instruction from SASS code. 
     
     Args:
         line (str): a SASS line from cuobjdump
     
     Returns:
-        {
-            'num': 
-            'pred': 
-            'op':
-            'ins':
-            'inst':
-            'code':
-        } 
+        Instruction: an Instruction object representing the SASS intruction 
     
     Raises:
         ValueError: If line is SASS line   
     """
     m = re.search("^\s+/\*(?P<num>[0-9a-f]+)\*/\s+(?P<pred>@!?(?P<predReg>P\d)\s+)?(?P<op>\w+)(?P<rest>[^;]*;)\s+/\* (?P<code>0x[0-9a-f]+)", line)
-    
     if m:
-        Inst = namedtuple('Inst', ['num', 'pred', 'op', 'ins', 'inst', 'code'])
         pred = m.group('pred') if m.group('pred') else ""
-               
-        return Inst(
+        
+        return Instruction(
             int(m.group('num'), 16),
             pred,
             m.group('op'),
             m.group('op') + m.group('rest'),
-            pred + str(m.group('op')) + str(m.group('rest')),
-            m.group('code')
+            m.group('code'), 
+            ''
         )
     else:
         raise ValueError("The input string is not SASS line")
+ 
+def flagsToString(flag):
+    """
+    Convert SASS control flags to string.
+    
+    Equivalent to MaxAs::MaxAsGrammer::printCtrl
+    
+    Args:
+        ctrl (str): a SASS control flags
+        
+    Returns:
+        str: formatted SASS control flags
+    """
+    ctrlStall = (flag & 0x0000f) >> 0
+    ctrlYield = (flag & 0x00010) >> 4
+    ctrlWrtdb = (flag & 0x000e0) >> 5
+    ctrlReadb = (flag & 0x00700) >> 8
+    ctrlWatdb = (flag & 0x1f800) >> 11
+    
+    ctrlYield = '-' if ctrlYield == 1 else 'Y'
+    ctrlWrtdb = '-' if ctrlWrtdb == 7 else ctrlWrtdb + 1
+    ctrlReadb = '-' if ctrlReadb == 7 else ctrlReadb + 1
+    ctrlWatdb = '--' if ctrlWatdb == 0 else "%02x" % (ctrlWatdb)
+    
+    return "%s:%s:%s:%s:%x" % (ctrlWatdb, ctrlReadb, ctrlWrtdb, ctrlYield, ctrlStall) 
     
 def extract(sass, outputFile, params):
     """
-    Generate Maxas compatible SASS file
+    Generate Maxas compatible SASS file.
     """
     paramsMap = {}
     constants = {
@@ -140,7 +170,6 @@ def extract(sass, outputFile, params):
             outputFile.write("\t" + p + " : " + c +"\n")
     outputFile.write("</CONSTANT_MAPPING>\n\n")
     
-    sass = sass.split('\n')
     linePtr = 0
     
     labels = {}
@@ -155,6 +184,8 @@ def extract(sass, outputFile, params):
         
         flags = processSassCtrlFlags(line)
         
+        instSet = []
+        
         for flag in flags.ctrl:
             line = sass[linePtr]
             linePtr += 1
@@ -162,12 +193,12 @@ def extract(sass, outputFile, params):
             inst = processSassLine(line)
 
             # Convert branch/jump/call addresses to labels
-            if inst.op in JUMP_OPS and re.search("(?P<target>0x[0-9a-f]+)", inst.ins):
-                m = re.search("(?P<target>0x[0-9a-f]+)", inst.ins)
+            if inst.opcode in JUMP_OPS and re.search("(?P<target>0x[0-9a-f]+)", inst.inst):
+                m = re.search("(?P<target>0x[0-9a-f]+)", inst.inst)
                 target = m.group('target')
                 
                 # Skip the final BRA and stop processing the file
-                if inst.op == 'BRA' and (int(target, 16) == inst.num or int(target, 16) == inst.num - 8):
+                if inst.opcode == 'BRA' and (int(target, 16) == inst.line or int(target, 16) == inst.line - 8):
                     linePtr = len(sass)
                     break
                 # Check to see if we've already generated a label for this target address
@@ -176,15 +207,19 @@ def extract(sass, outputFile, params):
                     labels[target] = "TARGET" + str(labelNum)
                     labelNum += 1
                 
-                inst = inst._replace(ins = re.sub("(0x[0-9a-f]+)", labels[target], inst.ins))
+                inst = inst._replace(inst = re.sub("(0x[0-9a-f]+)", labels[target], inst.inst))
                 
-            constMatch = re.search("(c\[0x0\])\s*(\[0x[0-9a-f]+\])", inst.ins)   
+            constMatch = re.search("(c\[0x0\])\s*(\[0x[0-9a-f]+\])", inst.inst)   
             if constMatch and (constMatch.group(1) + constMatch.group(2)) in paramsMap.keys():         
-                inst = inst._replace(ins = re.sub(
+                inst = inst._replace(inst = re.sub(
                     "(c\[0x0\])\s*(\[0x[0-9a-f]+\])", 
                     paramsMap[constMatch.group(1) + constMatch.group(2)] , 
-                    inst.ins))
-            print(inst.ins)
-                
+                    inst.inst))
             
+            inst = inst._replace(flag = flagsToString(flag))
+            instSet.append(inst)
+        for inst in instSet:
+            if labels.get(inst.line):
+                outputFile.write(labels[inst.line] + ":\n")
+            outputFile.write("%s %5s%s\n" % (inst.flag, inst.pred, inst.inst))
             

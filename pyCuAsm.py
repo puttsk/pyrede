@@ -5,6 +5,8 @@ import sys
 from pyCuAsm.pycuasm import *
 from pyCuAsm.cubin import Cubin
 
+USE_STATIC_OBJDUMP = True
+
 def printCubinInfo(cubin_file, cubin):
     print("%s: \n\tarch: sm_%d \n\tmachine: %d bit \n\taddress_size: %d bit\n" % (cubin_file, cubin.arch, cubin.addressSize, cubin.addressSize))
     for kernel in cubin.kernels:
@@ -52,7 +54,15 @@ def main():
         else:
             outputFile = open(outputName, 'w')
         
-        cuobjdumpSass = subprocess.check_output(['cuobjdump','-arch', "sm_"+str(cubin.arch),'-sass','-fun', kernelName, args.cubin_file], universal_newlines=True)
+        cuobjdumpSass = ""
+        
+        if USE_STATIC_OBJDUMP:
+            sassFile = open('tests/data/sm_52.sass', 'r') 
+            cuobjdumpSass = sassFile.readlines()
+            sassFile.close()
+        else:
+            cuobjdumpSass = subprocess.check_output(['cuobjdump','-arch', "sm_"+str(cubin.arch),'-sass','-fun', kernelName, args.cubin_file], universal_newlines=True)
+            cuobjdumpSass = cuobjdumpSass.split('\n')
         
         outputFile.write("# Kernel: "+ kernelName +"\n" )
         outputFile.write("# Arch: sm_"+ str(cubin.arch) +"\n" )
