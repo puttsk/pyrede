@@ -5,8 +5,6 @@ import sys
 from pyCuAsm.pycuasm import *
 from pyCuAsm.cubin import Cubin
 
-USE_STATIC_OBJDUMP = True
-
 def printCubinInfo(cubin_file, cubin):
     print("%s: \n\tarch: sm_%d \n\tmachine: %d bit \n\taddress_size: %d bit\n" % (cubin_file, cubin.arch, cubin.addressSize, cubin.addressSize))
     for kernel in cubin.kernels:
@@ -30,6 +28,7 @@ def main():
     parser.add_argument('-e','--extract', action='store_true', default=False, help="Extract a single kernel into an asm file from a cubin. Works much like cuobjdump but outputs in a format that can be re-assembled back into the cubin.")
     parser.add_argument('-k','--kernel', help="Specify kernel name for extract operation.")
     parser.add_argument('-o','--output', help="Specify output assembly file name.")
+    parser.add_argument('--cuobjdump', help="Specify an input cuobjdump file. For debugging purpose only when cuobjdume does not exist in the system.")
     parser.add_argument('cubin_file', type=str)
     args = parser.parse_args()
 
@@ -44,25 +43,32 @@ def main():
         kernel = None
         
         cubin = Cubin(args.cubin_file)
-        
+
         if kernelName == None:
             kernelName = list(cubin.kernels.keys())[0]
             kernel = cubin.kernels[kernelName]
+             
+        cuobjdumpSass = ""
+        
+        if args.cuobjdump:
+            sassFile = open(args.cuobjdump, 'r') 
+            cuobjdumpSass = sassFile.readlines()
+            sassFile.close()
+        else:
+            try:
+                cuobjdumpSass = subprocess.check_output(['cuobjdump','-arch', "sm_"+str(cubin.arch),'-sass','-fun', kernelName, args.cubin_file], universal_newlines=True)
+                cuobjdumpSass = cuobjdumpSass.split('\n')
+            except FileNotFoundError:
+                print("cuobjdump does not exist in this system. Please install CUDA toolkits before using this tool.")
+                exit()
+            except subprocess.CalledProcessError as err:
+                print(err.cmd)
+                exit()
         
         if outputName == None:
             outputFile = sys.stdout
         else:
             outputFile = open(outputName, 'w')
-        
-        cuobjdumpSass = ""
-        
-        if USE_STATIC_OBJDUMP:
-            sassFile = open('tests/data/sm_52.sass', 'r') 
-            cuobjdumpSass = sassFile.readlines()
-            sassFile.close()
-        else:
-            cuobjdumpSass = subprocess.check_output(['cuobjdump','-arch', "sm_"+str(cubin.arch),'-sass','-fun', kernelName, args.cubin_file], universal_newlines=True)
-            cuobjdumpSass = cuobjdumpSass.split('\n')
         
         outputFile.write("# Kernel: "+ kernelName +"\n" )
         outputFile.write("# Arch: sm_"+ str(cubin.arch) +"\n" )
