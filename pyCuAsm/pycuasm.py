@@ -6,19 +6,63 @@ REL_OFFSETS = ['BRA', 'SSY', 'CAL', 'PBK', 'PCNT']
 ABS_OFFSETS = ['JCAL']
 JUMP_OPS = REL_OFFSETS + ABS_OFFSETS
 
-Instruction = namedtuple('Inst', ['line', 'pred', 'opcode', 'inst', 'raw', 'flag'])
-"""
-Instruction class.
+class Instruction():
+    """
+    Instruction class.
 
-Fields:
-    'num': SASS line number
-    'pred': Predicate
-    'op': Instruction operator
-    'ins': Instruction string
-    'code': Instruction in raw format
-    'flag': Control flags
-"""
+    Properties:
+        'num': SASS line number
+        'pred': Predicate
+        'op': Instruction operator
+        'ins': Instruction string
+        'code': Instruction in raw format
+        'flag': Control flags
+    """
+    def __init__(self, line, pred, opcode, inst, raw, flags="", reuse=""):
+        self.__line = line
+        self.__pred = pred
+        self.__opcode = opcode
+        self.__inst = inst
+        self.__raw = raw
+        self.__flags = flags
+        self.__reuse = reuse
 
+    @property
+    def line(self):
+        return self.__line
+    
+    @property
+    def pred(self):
+        return self.__pred
+        
+    @property
+    def opcode(self):
+        return self.__opcode
+        
+    @property
+    def inst(self):
+        return self.__inst
+    @inst.setter
+    def inst(self, val):
+        self.__inst = val
+        
+    @property
+    def raw(self):
+        return self.__raw
+        
+    @property
+    def flags(self):
+        return self.__flags
+    @flags.setter
+    def flags(self, val):
+        self.__flags = val
+        
+    @property
+    def reuse(self):
+        return self.__reuse
+    @reuse.setter
+    def reuse(self, val):
+        self.__reuse = val
 
 def isSassCtrlLine(line):
     """
@@ -96,8 +140,7 @@ def processSassLine(line):
             pred,
             m.group('op'),
             m.group('op') + m.group('rest'),
-            m.group('code'), 
-            ''
+            m.group('code')
         )
     else:
         raise ValueError("The input string is not SASS line")
@@ -207,19 +250,35 @@ def extract(sass, outputFile, params):
                     labels[target] = "TARGET" + str(labelNum)
                     labelNum += 1
                 
-                inst = inst._replace(inst = re.sub("(0x[0-9a-f]+)", labels[target], inst.inst))
+                inst.inst = re.sub("(0x[0-9a-f]+)", labels[target], inst.inst)
                 
             constMatch = re.search("(c\[0x0\])\s*(\[0x[0-9a-f]+\])", inst.inst)   
             if constMatch and (constMatch.group(1) + constMatch.group(2)) in paramsMap.keys():         
-                inst = inst._replace(inst = re.sub(
+                inst.inst = re.sub(
                     "(c\[0x0\])\s*(\[0x[0-9a-f]+\])", 
                     paramsMap[constMatch.group(1) + constMatch.group(2)] , 
-                    inst.inst))
+                    inst.inst)
             
-            inst = inst._replace(flag = flagsToString(flag))
+            inst.flag = flagsToString(flag)
             instSet.append(inst)
         for inst in instSet:
             if labels.get(inst.line):
                 outputFile.write(labels[inst.line] + ":\n")
             outputFile.write("%s %5s%s\n" % (inst.flag, inst.pred, inst.inst))
             
+def test(sass):
+    lineNum = 0
+    while lineNum < len(sass):
+        line = sass[lineNum]
+        lineNum += 1
+        
+        if not isSassCtrlLine(line):
+            continue
+        
+        flags = processSassCtrlFlags(line)
+        
+        for reuse in flags.reuse:
+            line = sass[lineNum]
+            lineNum += 1
+            
+            inst = processSassLine(line)
