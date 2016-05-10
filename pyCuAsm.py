@@ -26,7 +26,6 @@ def main():
     parser = argparse.ArgumentParser(description='Python CUDA SASS Assembler')
     parser.add_argument('-l','--list',action='store_true', default=False, help="List kernels and symbols in the cubin file")
     parser.add_argument('-e','--extract', action='store_true', default=False, help="Extract a single kernel into an asm file from a cubin. Works much like cuobjdump but outputs in a format that can be re-assembled back into the cubin.")
-    parser.add_argument('-t','--test', action='store_true', default=False, help="Test a cubin or sass file to to see if the assembler can reproduce all of the contained opcodes. Also useful for extending the missing grammar rules.")
     parser.add_argument('-k','--kernel', help="Specify kernel name for extract operation.")
     parser.add_argument('-o','--output', help="Specify output assembly file name.")
     parser.add_argument('--cuobjdump', help="Specify an input cuobjdump file. For debugging purpose only when cuobjdume does not exist in the system.")
@@ -37,28 +36,6 @@ def main():
     if args.list:
         cubin = Cubin(args.cubin_file)
         printCubinInfo(args.cubin_file, cubin)
-    elif args.test:
-        cubin = Cubin(args.cubin_file)
-        
-        cuobjdumpSass = ""
-        
-        if args.cuobjdump:
-            sassFile = open(args.cuobjdump, 'r') 
-            cuobjdumpSass = sassFile.readlines()
-            sassFile.close()
-        else:
-            try:
-                cuobjdumpSass = subprocess.check_output(['cuobjdump','-arch', "sm_"+str(cubin.arch),'-sass','-fun', kernelName, args.cubin_file], universal_newlines=True)
-                cuobjdumpSass = cuobjdumpSass.split('\n')
-            except FileNotFoundError:
-                print("cuobjdump does not exist in this system. Please install CUDA toolkits before using this tool.")
-                exit()
-            except subprocess.CalledProcessError as err:
-                print(err.cmd)
-                exit()
-        
-        test(cuobjdumpSass)
-        
     elif args.extract:
         kernelName = args.kernel
         outputName = args.output

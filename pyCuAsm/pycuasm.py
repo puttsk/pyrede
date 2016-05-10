@@ -64,6 +64,7 @@ class Instruction():
     def reuse(self, val):
         self.__reuse = val
 
+
 def isSassCtrlLine(line):
     """
     Check if the input line is control instruction.
@@ -143,7 +144,7 @@ def processSassLine(line):
             m.group('code')
         )
     else:
-        raise ValueError("The input string is not SASS line")
+        raise ValueError("The input string is not SASS line: " + line)
  
 def flagsToString(flag):
     """
@@ -266,19 +267,4 @@ def extract(sass, outputFile, params):
                 outputFile.write(labels[inst.line] + ":\n")
             outputFile.write("%s %5s%s\n" % (inst.flag, inst.pred, inst.inst))
             
-def test(sass):
-    lineNum = 0
-    while lineNum < len(sass):
-        line = sass[lineNum]
-        lineNum += 1
-        
-        if not isSassCtrlLine(line):
-            continue
-        
-        flags = processSassCtrlFlags(line)
-        
-        for reuse in flags.reuse:
-            line = sass[lineNum]
-            lineNum += 1
-            
-            inst = processSassLine(line)
+  
