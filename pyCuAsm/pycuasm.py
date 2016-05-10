@@ -218,6 +218,7 @@ def extract(sass, outputFile, params):
     
     labels = {}
     labelNum = 1
+    instSet = []
     
     while linePtr < len(sass):
         line = sass[linePtr]
@@ -228,8 +229,6 @@ def extract(sass, outputFile, params):
         
         flags = processSassCtrlFlags(line)
         
-        instSet = []
-        
         for flag in flags.ctrl:
             line = sass[linePtr]
             linePtr += 1
@@ -239,10 +238,10 @@ def extract(sass, outputFile, params):
             # Convert branch/jump/call addresses to labels
             if inst.opcode in JUMP_OPS and re.search("(?P<target>0x[0-9a-f]+)", inst.inst):
                 m = re.search("(?P<target>0x[0-9a-f]+)", inst.inst)
-                target = m.group('target')
+                target = int(m.group('target'), 16)
                 
                 # Skip the final BRA and stop processing the file
-                if inst.opcode == 'BRA' and (int(target, 16) == inst.line or int(target, 16) == inst.line - 8):
+                if inst.opcode == 'BRA' and (target == inst.line or target == inst.line - 8):
                     linePtr = len(sass)
                     break
                 # Check to see if we've already generated a label for this target address
@@ -262,9 +261,10 @@ def extract(sass, outputFile, params):
             
             inst.flag = flagsToString(flag)
             instSet.append(inst)
-        for inst in instSet:
-            if labels.get(inst.line):
-                outputFile.write(labels[inst.line] + ":\n")
-            outputFile.write("%s %5s%s\n" % (inst.flag, inst.pred, inst.inst))
             
+    for inst in instSet:
+        if labels.get(inst.line):
+            outputFile.write(labels[inst.line] + ":\n")
+        outputFile.write("%s %5s%s\n" % (inst.flag, inst.pred, inst.inst))
+        
   
