@@ -2,8 +2,8 @@ import argparse
 import subprocess
 import sys
 
-from pyCuAsm.pycuasm import *
-from pyCuAsm.cubin import Cubin
+from pycuasm import *
+from pycuasm.cubin import Cubin
 
 def printCubinInfo(cubin_file, cubin):
     print("%s: \n\tarch: sm_%d \n\tmachine: %d bit \n\taddress_size: %d bit\n" % (cubin_file, cubin.arch, cubin.addressSize, cubin.addressSize))

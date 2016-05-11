@@ -4,7 +4,7 @@ import json
 import sys
 
 from collections import namedtuple, OrderedDict
-from pyCuAsm.cubin import Cubin
+from pycuasm.cubin import Cubin
 
 
 REL_OFFSETS = ['BRA', 'SSY', 'CAL', 'PBK', 'PCNT']
