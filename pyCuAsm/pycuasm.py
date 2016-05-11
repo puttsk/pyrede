@@ -1,6 +1,11 @@
 import re
 import pprint
-from collections import namedtuple
+import json
+import sys
+
+from collections import namedtuple, OrderedDict
+from pyCuAsm.cubin import Cubin
+
 
 REL_OFFSETS = ['BRA', 'SSY', 'CAL', 'PBK', 'PCNT']
 ABS_OFFSETS = ['JCAL']
@@ -171,10 +176,55 @@ def flagsToString(flag):
     
     return "%s:%s:%s:%s:%x" % (ctrlWatdb, ctrlReadb, ctrlWrtdb, ctrlYield, ctrlStall) 
     
-def extract(sass, outputFile, params):
+def extract(args):
     """
     Generate Maxas compatible SASS file.
     """
+    kernelName = args.kernel
+    outputName = args.output
+    outputFile = None
+    kernel = None
+    
+    cubin = Cubin(args.cubin_file)
+
+    if kernelName == None:
+        kernelName = list(cubin.kernels.keys())[0]
+        kernel = cubin.kernels[kernelName]
+            
+    sass = ""
+    
+    if args.cuobjdump:
+        sassFile = open(args.cuobjdump, 'r') 
+        sass = sassFile.readlines()
+        sassFile.close()
+    else:
+        try:
+            sass = subprocess.check_output(['cuobjdump','-arch', "sm_"+str(cubin.arch),'-sass','-fun', kernelName, args.cubin_file], universal_newlines=True)
+            sass = cuobjdumpSass.split('\n')
+        except FileNotFoundError:
+            print("cuobjdump does not exist in this system. Please install CUDA toolkits before using this tool.")
+            exit()
+        except subprocess.CalledProcessError as err:
+            print(err.cmd)
+            exit()
+    
+    if outputName == None:
+        outputFile = sys.stdout
+    else:
+        outputFile = open(outputName, 'w')
+    
+    outputFile.write("# Kernel: "+ kernelName +"\n" )
+    outputFile.write("# Arch: sm_"+ str(cubin.arch) +"\n" )
+    outputFile.write("# InsCnt: " +"\n" )
+    outputFile.write("# RegCnt: "+ str(kernel['RegisterCount']) +"\n" )
+    outputFile.write("# SharedSize: "+ str(kernel['SharedSize']) +"\n" )
+    outputFile.write("# BarCnt: "+ str(kernel['BarrierCount']) +"\n" )
+    outputFile.write("# Params(" + str(kernel['ParameterCount']) +"):\n#\tord:addr:size:align\n")
+    for param in kernel['Parameters']:
+        outputFile.write("#\t" + param + "\n")
+    outputFile.write("# Instructions:\n\n")
+    
+    
     paramsMap = {}
     constants = {
         'blockDimX' : 'c[0x0][0x8]',
@@ -185,13 +235,14 @@ def extract(sass, outputFile, params):
         'gridDimZ' : 'c[0x0][0x1c]',
     }
     
+    constants = OrderedDict(sorted(constants.items(), key=lambda t: t[0]))
+    
     outputFile.write("<CONSTANT_MAPPING>\n")
     for const in constants:
-        outputFile.write("\t" + const + " : " + constants[const] + "\n")
+        #outputFile.write("\t" + const + " : " + constants[const] + "\n")
         paramsMap[constants[const]] = const
-    outputFile.write("\n")
     
-    for param in params:
+    for param in kernel['Parameters']:
         ord, offset, size, align = param.split(':')
         size = int(size)
         ord = int(ord)
@@ -203,7 +254,8 @@ def extract(sass, outputFile, params):
                 p = "param_%d[%d]" % (ord, num)
                 c = "c[0x0][0x%x]" % (offset)
                 paramsMap[c] = p
-                outputFile.write("\t" + p + " : " + c +"\n")
+                constants[p] = c
+                #outputFile.write("\t" + p + " : " + c +"\n")
                 size -= 4
                 offset += 4
                 num += 1
@@ -211,8 +263,12 @@ def extract(sass, outputFile, params):
             p = "param_%d" % (ord)
             c = "c[0x0][0x%x]" % (offset)
             paramsMap[c] = p
-            outputFile.write("\t" + p + " : " + c +"\n")
-    outputFile.write("</CONSTANT_MAPPING>\n\n")
+            constants[p] = c
+            #outputFile.write("\t" + p + " : " + c +"\n")
+    
+    json.dump(constants, outputFile, indent=4)
+            
+    outputFile.write("\n</CONSTANT_MAPPING>\n\n")
     
     linePtr = 0
     
