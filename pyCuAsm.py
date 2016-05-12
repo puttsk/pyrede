@@ -5,23 +5,6 @@ import sys
 from pycuasm import *
 from pycuasm.cubin import Cubin
 
-def printCubinInfo(cubin_file, cubin):
-    print("%s: \n\tarch: sm_%d \n\tmachine: %d bit \n\taddress_size: %d bit\n" % (cubin_file, cubin.arch, cubin.addressSize, cubin.addressSize))
-    for kernel in cubin.kernels:
-        printKernelInfo(cubin.kernels[kernel])
-    for symbol in cubin.symbols:
-        print("Symbol: " + symbol + "\n")
-
-def printKernelInfo(kernel):
-    print("Kernel: " + kernel['Name'])
-    print("\tLinkage: %s \n\tParams: %d \n\tSize: %d \n\tRegisters: %d \n\tSharedMem: %d \n\tBarriers: %d" % 
-    (   kernel['Linkage'], 
-        kernel['ParameterCount'], 
-        kernel['size'],
-        kernel['RegisterCount'],
-        kernel['SharedSize'],
-        kernel['BarrierCount']))
-
 def main():
     parser = argparse.ArgumentParser(description='Python CUDA SASS Assembler')
     parser.add_argument('-l','--list',action='store_true', default=False, help="List kernels and symbols in the cubin file")
@@ -34,8 +17,7 @@ def main():
 
     #List kernels and symbol inside the cubin file
     if args.list:
-        cubin = Cubin(args.cubin_file)
-        printCubinInfo(args.cubin_file, cubin)
+        Cubin(args.cubin_file).printInfo()
     elif args.extract:
         extract(args)        
     else:

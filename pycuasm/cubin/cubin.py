@@ -200,6 +200,7 @@ class Cubin():
 
     def __init__(self, fileName):
         try:
+            self.fileName = fileName
             cubinFile = open(fileName, 'rb')
 
             # Try reading header assuming 32-bit header
@@ -452,4 +453,25 @@ class Cubin():
         except:
             print("Unexpected error:", sys.exc_info()[0])
             raise
+    
+    def printInfo(self):
+        print("%s: \n\tarch: sm_%d \n\tmachine: %d bit \n\taddress_size: %d bit\n" % 
+            (   self.fileName, 
+                self.arch, 
+                self.addressSize, 
+                self.addressSize))
+        for kernel in self.kernels:
+            self.__printKernelInfo(self.kernels[kernel])
+        for symbol in self.symbols:
+            print("Symbol: " + symbol + "\n")
+    
+    def __printKernelInfo(self, kernel):
+        print("Kernel: " + kernel['Name'])
+        print("\tLinkage: %s \n\tParams: %d \n\tSize: %d \n\tRegisters: %d \n\tSharedMem: %d \n\tBarriers: %d" % 
+        (   kernel['Linkage'], 
+            kernel['ParameterCount'], 
+            kernel['size'],
+            kernel['RegisterCount'],
+            kernel['SharedSize'],
+            kernel['BarrierCount']))
         
