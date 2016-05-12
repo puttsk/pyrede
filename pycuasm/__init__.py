@@ -1,2 +1,4 @@
 from pycuasm.extract import extract
-__all__ = ['extract']
+from pycuasm.compile import compile
+
+__all__ = ['extract', 'compile']
