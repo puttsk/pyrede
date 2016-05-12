@@ -450,6 +450,9 @@ class Cubin():
                 pprint.pprint(self.sectionHeader)
                 pprint.pprint("==============")
                 pprint.pprint(self.kernels)
+        except struct.error:
+            print("The input file is not Cubin: " + self.fileName)
+            exit(1)
         except:
             print("Unexpected error:", sys.exc_info()[0])
             raise

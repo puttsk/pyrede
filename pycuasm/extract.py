@@ -185,7 +185,7 @@ def extract(args):
     outputFile = None
     kernel = None
     
-    cubin = Cubin(args.extract)
+    cubin = Cubin(args.input_file)
 
     if kernelName == None:
         kernelName = list(cubin.kernels.keys())[0]
