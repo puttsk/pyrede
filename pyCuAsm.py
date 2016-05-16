@@ -17,11 +17,11 @@ def main():
 
     #List kernels and symbol inside the cubin file
     if args.list:
-        Cubin(args.input_file).printInfo()
+        Cubin(args.input_file).print_info()
     elif args.extract:
         extract(args)        
     else:
-        parser.print_help()
+        compile(args)
 
 if __name__ == "__main__":
     # execute only if run as a script

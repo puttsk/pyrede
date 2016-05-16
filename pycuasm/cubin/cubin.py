@@ -457,7 +457,7 @@ class Cubin():
             print("Unexpected error:", sys.exc_info()[0])
             raise
     
-    def printInfo(self):
+    def print_info(self):
         print("%s: \n\tarch: sm_%d \n\tmachine: %d bit \n\taddress_size: %d bit\n" % 
             (   self.fileName, 
                 self.arch, 
