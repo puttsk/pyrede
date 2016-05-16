@@ -2,10 +2,12 @@ import re
 import pprint
 import json
 import sys
+import subprocess
 
 from collections import namedtuple, OrderedDict
 from pycuasm.cubin import Cubin
 
+CUDA_BIN_DIR = "/usr/local/cuda-6.5/bin/"
 
 REL_OFFSETS = ['BRA', 'SSY', 'CAL', 'PBK', 'PCNT']
 ABS_OFFSETS = ['JCAL']
@@ -199,7 +201,7 @@ def extract(args):
         sassFile.close()
     else:
         try:
-            sass = subprocess.check_output(['cuobjdump','-arch', "sm_"+str(cubin.arch),'-sass','-fun', kernelName, args.cubin_file], universal_newlines=True)
+            cuobjdumpSass = subprocess.check_output([CUDA_BIN_DIR+'cuobjdump','-arch', "sm_"+str(cubin.arch),'-sass','-fun', kernelName, args.input_file], universal_newlines=True)
             sass = cuobjdumpSass.split('\n')
         except FileNotFoundError:
             print("cuobjdump does not exist in this system. Please install CUDA toolkits before using this tool.")
