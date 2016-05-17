@@ -13,8 +13,6 @@ def main():
     parser.add_argument('--cuobjdump', help="Specify an input cuobjdump file. For debugging purpose only when cuobjdume does not exist in the system.")
     parser.add_argument('input_file', type=str)
     args = parser.parse_args()
-    
-    pprint.pprint(args)
 
     #List kernels and symbol inside the cubin file
     if args.list:

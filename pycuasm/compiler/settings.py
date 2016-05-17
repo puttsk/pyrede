@@ -1,3 +1,5 @@
+DEBUG = True
+
 reserved = {
    'blockDimX' : 'BLOCK_DIM_X',
    'blockDimY' : 'BLOCK_DIM_Y',
@@ -12,7 +14,6 @@ tokens = [
    'CONSTANT',
    'FLAGS',
    'ID',
-   'LABEL',
    'HEXADECIMAL',
    'INTEGER',
    'FLOAT',
@@ -21,3 +22,4 @@ tokens = [
    'SPECIAL_REGISTER',
    'PARAMETER'
 ] + list(reserved.values())
+

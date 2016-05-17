@@ -2,7 +2,7 @@ import ply.lex as lex
 
 from pycuasm.compiler.settings import tokens, reserved
 
-literals = [',', ';','[',']', '{', '}', '@', '!']
+literals = [',', ';','[',']', '{', '}', '@', '!', ':']
 
 flag = r'[0-9,a-f,A-F,-]'
 
@@ -20,10 +20,6 @@ def t_HEXADECIMAL(t):
 
 def t_FLAGS(t):
     r'([0-9,a-f,A-F,-][0-9,a-f,A-F,-]):([0-9,a-f,A-F,-]):([0-9,a-f,A-F,-]):([Y-]):([0-9,a-f,A-F,-])'
-    return t
-
-def t_LABEL(t):
-    r'[a-z,A-Z]\w*:'
     return t
 
 def t_PARAMETER(t):

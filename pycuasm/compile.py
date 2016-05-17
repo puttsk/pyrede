@@ -30,7 +30,11 @@ class Sass():
             
 def compile(args):
     sass = Sass(args.input_file)
-    
+    ast = sass_parser.parse(sass.sass_raw, lexer=sass_lexer)
+
+    pprint(ast)
+
+def test_lexer(sass):
     sass_lexer.input(sass.sass_raw)
     while True:
         tok = sass_lexer.token()
@@ -38,9 +42,7 @@ def compile(args):
             break      # No more input
         print(tok.type + " ", end="")
         if tok.type == ';' or tok.type == 'LABEL':
-            print() 
-    
-    sass_parser.parse(sass.sass_raw, lexer=sass_lexer)
+            print()
                 
         
         

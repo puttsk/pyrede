@@ -1,3 +1,5 @@
+from enum import Enum
+
 class Flags():
     def __init__(self, wait_barrier, read_barrier, write_barrier, yield_hint, stall):
         
@@ -27,6 +29,92 @@ class Flags():
             self.yield_hint,
             self.stall
         )
+
+class Opcode():
+    def __init__(self, name):
+        self.name = name
+
+    def __str__(self):
+        return self.name
     
+    def __repr__(self):
+        return self.__str__()
+
+class Condition():
+    def __init__(self, predicate, condition=True):
+        self.predicate = predicate
+        self.condition = condition
         
+    def __str__(self):
+        return "@%s%s" % ("" if self.condition else "!", self.predicate)
+
+class Instruction():
+    def __init__(self, flags, opcode, operands=None, predicate=None):
+        self.flags = flags
+        self.opcode = opcode
+        self.operands = operands
+        self.predicate = predicate
+    
+    def __str__(self):
+        return "%s\t%s %s %s" % (   self.flags, 
+                                    self.predicate if self.predicate else "", 
+                                    self.opcode,
+                                    self.operands)
+
+    def __repr__(self):
+        return "%s\t%s %s %s" % (   self.flags, 
+                                    self.predicate if self.predicate else "", 
+                                    self.opcode,
+                                    self.operands)
+
+class Label():
+    def __init__(self, name):
+        self.name = name
+
+    def __str__(self):
+        return self.name
+    
+    def __repr__(self):
+        return self.__str__()
         
+class Pointer():
+    def __init__(self, register):
+        self.register = register
+        
+    def __str__(self):
+        return "[%s]" % self.register
+
+    def __repr__(self):
+        return self.__str__()        
+
+class Predicate():
+    def __init__(self, name):
+        self.name = name
+
+    def __str__(self):
+        return self.name
+    
+    def __repr__(self):
+        return self.__str__()
+
+class Register():
+    def __init__(self, name, is_special = False):
+        self.name = name
+        self.is_special = is_special
+
+    def __str__(self):
+        return self.name
+    
+    def __repr__(self):
+        return self.__str__()    
+    
+class Constant():
+    def __init__(self, name, is_param = False):
+        self.name = name
+        self.is_param = is_param
+
+    def __str__(self):
+        return self.name
+    
+    def __repr__(self):
+        return self.__str__()
