@@ -50,11 +50,11 @@ class Flags():
         )
 
 class Opcode():
-    def __init__(self, name):
-        opcode = name.split('.')
-        self.name = opcode[0]
-        self.extension = opcode[1:]
-        self.full = name        
+    def __init__(self, opcode):
+        name = opcode.split('.')
+        self.name = name[0]
+        self.extension = name[1:]
+        self.full = opcode        
         
         if self.name not in SASS_GRAMMARS:
             raise ValueError("Invalid instruction: " + name)
@@ -62,10 +62,10 @@ class Opcode():
         self.grammar = SASS_GRAMMARS[self.name]
 
     def __str__(self):
-        return self.name 
+        return self.full 
     
     def __repr__(self):
-        return self.__str__() + ((".%s" % ".".join(self.extension)) if len(self.extension) > 0 else "") 
+        return self.full 
 
 class Condition():
     def __init__(self, predicate, condition=True):
@@ -107,18 +107,20 @@ class Predicate():
         return self.__str__()
 
 class Register():
-    def __init__(self, name, is_special = False):
-        self.full = name
-        name = name.split('.')
+    def __init__(self, register, is_special = False):
+        name = register.split('.')
+        
+        self.full = register
         self.name = name[0]
         self.extension = name[1:]
+        self.reuse = True if 'reuse' in self.extension else False
         self.is_special = is_special
 
     def __str__(self):
         return "%s" % self.name
     
     def __repr__(self):
-        return self.__str__() + ((".%s" % ".".join(self.extension)) if len(self.extension) > 0 else "")   
+        return self.full   
     
     def __eq__(self, other):
         return self.name == other.name
