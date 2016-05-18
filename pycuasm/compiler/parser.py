@@ -40,7 +40,7 @@ def p_conditional_instruction(p):
 def p_label(p):
     '''label : ID ':'
     '''
-    p[0] = p[1]
+    p[0] = Label(p[1])
 
 def p_flags(p):
     '''flags : FLAGS
@@ -147,8 +147,6 @@ def p_immediate_hex(p):
 def p_error(p):
     print("Syntax error at line " + str(p.lineno))
     raise SyntaxError(p)
-
-
 
 # Build the parser
 sass_parser = yacc.yacc(debug=DEBUG)

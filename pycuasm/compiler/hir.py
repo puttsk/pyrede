@@ -22,7 +22,7 @@ class Flags():
         self.stall = int(stall, 16)
     
     def __str__(self):
-        return "%d:%d:%d:%d:%d" % (
+        return "%d:%d:%d:%d:%x" % (
             self.wait_barrier,
             self.read_barrier,
             self.write_barrier,
@@ -54,25 +54,25 @@ class Instruction():
         self.opcode = opcode
         self.operands = operands
         self.predicate = predicate
+        self.addr = 0
     
     def __str__(self):
-        return "%s\t%s %s %s" % (   self.flags, 
+        return "%4x: %s %s\t%s %s" % ( self.addr,   
+                                    self.flags, 
                                     self.predicate if self.predicate else "", 
                                     self.opcode,
                                     self.operands)
 
     def __repr__(self):
-        return "%s\t%s %s %s" % (   self.flags, 
-                                    self.predicate if self.predicate else "", 
-                                    self.opcode,
-                                    self.operands)
+        return self.__str__()
 
 class Label():
     def __init__(self, name):
         self.name = name
+        self.addr = 0
 
     def __str__(self):
-        return self.name
+        return "%s:%x" % (self.name, self.addr)
     
     def __repr__(self):
         return self.__str__()
@@ -99,14 +99,19 @@ class Predicate():
 
 class Register():
     def __init__(self, name, is_special = False):
-        self.name = name
+        name = name.split('.')
+        self.name = name[0]
+        self.attributes = name[1:]
         self.is_special = is_special
 
     def __str__(self):
-        return self.name
+        return "%s" % self.name
     
     def __repr__(self):
         return self.__str__()    
+    
+    def __eq__(self, other):
+        return self.name == other.name
     
 class Constant():
     def __init__(self, name, is_param = False):
