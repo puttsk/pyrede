@@ -8,7 +8,7 @@ from pycuasm.compiler.hir import *
 def p_program(p):
     '''program  : instruction_list
     '''
-    p[0] = p[1]
+    p[0] = Program(p[1])
     
 def p_instruction_list(p):
     '''instruction_list : instruction

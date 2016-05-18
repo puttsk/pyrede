@@ -1,6 +1,10 @@
 from enum import Enum
 from pycuasm.compiler.grammar import SASS_GRAMMARS
 
+class Program():
+    def __init__(self, ast):
+        self.ast = ast
+
 class Instruction():
     def __init__(self, flags, opcode, operands=None, predicate=None):
         self.flags = flags
@@ -66,6 +70,10 @@ class Opcode():
     
     def __repr__(self):
         return self.full 
+        
+    @property
+    def reg_store(self):
+        return self.grammar.reg_store
 
 class Condition():
     def __init__(self, predicate, condition=True):
