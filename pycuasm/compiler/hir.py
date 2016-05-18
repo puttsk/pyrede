@@ -4,6 +4,30 @@ from pycuasm.compiler.grammar import SASS_GRAMMARS
 class Program():
     def __init__(self, ast):
         self.ast = ast
+        
+        #Update AST and build register table
+        registers = []
+        
+        addr = 0x0008
+        instCount = 0
+        for inst in self.ast:
+            if isinstance(inst, Instruction):
+                # Assign address to each instruction
+                inst.addr = addr
+                addr += 8 #Each instruction size is 8-byte long
+                instCount += 1
+                if instCount % 3 == 0: 
+                    addr += 8
+                
+                regs = [x for x in inst.operands if isinstance(x, Register) and not x.is_special]
+                registers += [x for x in regs if x not in registers]
+                
+            elif isinstance(inst, Label):
+                inst.addr = addr
+            else:
+                raise ValueError("Unknown IR Type: %s %s" % (inst.__class__, inst))
+
+        self.registers = registers
 
 class Instruction():
     def __init__(self, flags, opcode, operands=None, predicate=None):
