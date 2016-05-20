@@ -36,12 +36,18 @@ class Instruction():
         self.operands = operands
         self.predicate = predicate
         self.addr = 0        
-    
+        self.dest = None
+        
+        if opcode.reg_store:
+            self.dest = operands[0]
+            self.operands = operands[1:]
+        
     def __str__(self):
-        return "%4x: %s %s\t%s %s" % ( self.addr,   
+        return "%4x: %s %s\t%s %s %s" % ( self.addr,   
                                     self.flags, 
                                     self.predicate if self.predicate else "", 
                                     self.opcode,
+                                    self.dest if self.dest else "",
                                     self.operands)
 
     def __repr__(self):
@@ -106,6 +112,9 @@ class Condition():
         
     def __str__(self):
         return "@%s%s" % ("" if self.condition else "!", self.predicate)
+    
+    def __eq__(self, other):
+        return self and other and (self.predicate.name == other.predicate.name and self.condition == other.condition)
 
 class Label():
     def __init__(self, name):
@@ -147,6 +156,9 @@ class Register():
         self.extension = name[1:]
         self.reuse = True if 'reuse' in self.extension else False
         self.is_special = is_special
+
+    def __hash__(self):
+        return hash(self.name)
 
     def __str__(self):
         return "%s" % self.name
