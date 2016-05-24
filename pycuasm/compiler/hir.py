@@ -1,7 +1,7 @@
 from enum import Enum
 from pycuasm.compiler.grammar import SASS_GRAMMARS
 
-class Program():
+class Program(object):
     def __init__(self, ast):
         self.ast = ast
         
@@ -29,7 +29,7 @@ class Program():
 
         self.registers = registers
 
-class Instruction():
+class Instruction(object):
     def __init__(self, flags, opcode, operands=None, condition=None):
         self.flags = flags
         self.opcode = opcode
@@ -53,7 +53,7 @@ class Instruction():
     def __repr__(self):
         return self.__str__()
 
-class Flags():
+class Flags(object):
     def __init__(self, wait_barrier, read_barrier, write_barrier, yield_hint, stall):
         
         self.wait_barrier = int(wait_barrier) if wait_barrier != '--' else 0
@@ -83,7 +83,7 @@ class Flags():
             self.stall
         )
 
-class Opcode():
+class Opcode(object):
     def __init__(self, opcode):
         name = opcode.split('.')
         self.name = name[0]
@@ -105,7 +105,7 @@ class Opcode():
     def reg_store(self):
         return self.grammar.reg_store
 
-class Condition():
+class Condition(object):
     def __init__(self, predicate, condition=True):
         self.predicate = predicate
         self.condition = condition
@@ -116,7 +116,7 @@ class Condition():
     def __eq__(self, other):
         return self and other and (self.predicate.name == other.predicate.name and self.condition == other.condition)
 
-class Label():
+class Label(object):
     def __init__(self, name):
         self.name = name
         self.addr = 0
@@ -127,7 +127,7 @@ class Label():
     def __repr__(self):
         return self.__str__()
         
-class Pointer():
+class Pointer(object):
     def __init__(self, register):
         self.register = register
         
@@ -137,7 +137,7 @@ class Pointer():
     def __repr__(self):
         return self.__str__()        
 
-class Predicate():
+class Predicate(object):
     def __init__(self, name):
         self.name = name
 
@@ -147,7 +147,7 @@ class Predicate():
     def __repr__(self):
         return self.__str__()
 
-class Register():
+class Register(object):
     def __init__(self, register, is_special = False):
         name = register.split('.')
         
@@ -169,7 +169,7 @@ class Register():
     def __eq__(self, other):
         return self.name == other.name
     
-class Constant():
+class Constant(object):
     def __init__(self, name, is_param = False):
         self.name = name
         self.is_param = is_param
