@@ -30,11 +30,11 @@ class Program():
         self.registers = registers
 
 class Instruction():
-    def __init__(self, flags, opcode, operands=None, predicate=None):
+    def __init__(self, flags, opcode, operands=None, condition=None):
         self.flags = flags
         self.opcode = opcode
         self.operands = operands
-        self.predicate = predicate
+        self.condition = condition
         self.addr = 0        
         self.dest = None
         
@@ -45,7 +45,7 @@ class Instruction():
     def __str__(self):
         return "%4x: %s %s\t%s %s %s" % ( self.addr,   
                                     self.flags, 
-                                    self.predicate if self.predicate else "", 
+                                    self.condition if self.condition else "", 
                                     self.opcode,
                                     self.dest if self.dest else "",
                                     self.operands)
@@ -122,7 +122,7 @@ class Label():
         self.addr = 0
 
     def __str__(self):
-        return "%s:%x" % (self.name, self.addr)
+        return "[%x]%s" % (self.addr, self.name)
     
     def __repr__(self):
         return self.__str__()

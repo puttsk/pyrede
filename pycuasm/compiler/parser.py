@@ -35,7 +35,7 @@ def p_unconditional_instruction(p):
 def p_conditional_instruction(p):
     '''conditional_instruction  : flags condition ID operand_list ';' 
     '''
-    p[0] = Instruction(p[1], Opcode(p[3]),operands=p[4], predicate=p[2])
+    p[0] = Instruction(p[1], Opcode(p[3]),operands=p[4], condition=p[2])
 
 def p_label(p):
     '''label : ID ':'

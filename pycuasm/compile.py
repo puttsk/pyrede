@@ -38,47 +38,34 @@ def compile(args):
     sass = Sass(args.input_file)
     program = sass_parser.parse(sass.sass_raw, lexer=sass_lexer)
    
-    print("Register usage: %d" % len(program.registers))
+    print("Register usage: %s" % program.registers)
     pprint(program.ast)
     
     reg_live_map = dict.fromkeys(program.registers)
     reg_scratch_map = dict.fromkeys(program.registers)
     
     # Build CFG
+    print("\nCrateing CFG")
     
     # Find the beginning of basic blocks. A basic block begin at the start
     # of a program, after a label, or a new predicate is found. 
     leader = []
     read_leader = True
-    prev_predicate = None    
     for inst in program.ast:
         if isinstance(inst, Instruction) and read_leader:
             # Mark the instruction as the beginning of a new basic block 
             leader.append(inst)
-            prev_predicate = inst.predicate
+            prev_condition = inst.condition
             read_leader = False
             
-        elif isinstance(inst, Instruction) and not read_leader:
+        elif isinstance(inst, Instruction) and not read_leader:             
             if inst.opcode.name in JUMP_OPS:
-                # If face jump instruction, next instruction is the 
-                # beginning of a new block
                 read_leader = True
-             
-            if inst.predicate and inst.predicate != prev_predicate:
-                # If the instruction has predicate and the predicate is not the 
-                # same as previous Instruction, this instruction is the beginning of
-                # a new block
-                leader.append(inst)
-                prev_predicate = inst.predicate
-            elif not inst.predicate and prev_predicate != None:
-                # If the previous instruction has predicate and the current instruction
-                # does not have one, this instruction is the beginning of the block 
-                leader.append(inst)
-                prev_predicate = None
+                
         elif isinstance(inst, Label):
             read_leader = True
     
-    # Construct CFG
+    # Construct CFG basic blocks
     label_table = {} 
     cfg = Cfg()
     for lead_inst in leader:
@@ -94,17 +81,36 @@ def compile(args):
         if isinstance(program.ast[ast_idx_next -1], Label):
             ast_idx_next -= 1
         
-        block = BasicBlock(program.ast[ast_idx:ast_idx_next])        
-
+        block = BasicBlock(program.ast[ast_idx:ast_idx_next],)        
+        cfg.add_basic_block(block)
+        
         if ast_idx > 0 and isinstance(program.ast[ast_idx-1], Label):
             label = program.ast[ast_idx-1]
             block.attach_label(label)
-            label_table[label] = block 
+            label_table[label.name] = block 
         
-        # Block appears in its original program order
-        cfg.add_basic_block(block)        
+        # Block appears in its original program order        
+    
+    # Connect blocks in CFG
+    for block in cfg.blocks:
+        idx = cfg.blocks.index(block)
+        last_inst = block.instructions[-1]
+         
+        if last_inst.opcode.name not in JUMP_OPS and idx < len(cfg.blocks)-1:
+            block.taken = cfg.blocks[idx+1]
+        elif last_inst.opcode.name in JUMP_OPS:
+            if block.condition:
+                if block.condition.condition:
+                    block.taken = label_table[last_inst.operands[0]] 
+                    block.not_taken = cfg.blocks[idx+1] if idx < len(cfg.blocks)-1 else None
+                else:
+                    block.not_taken = label_table[last_inst.operands[0]] 
+                    block.taken = cfg.blocks[idx+1] if idx < len(cfg.blocks)-1 else None
+            else:
+                block.taken = label_table[last_inst.operands[0]]
 
-                
+    for block in cfg.blocks:
+        print("%s\n\t%s\n\t%s" % (block, block.taken, block.not_taken))
             
 def test_lexer(sass):
     sass_lexer.input(sass.sass_raw)
