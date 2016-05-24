@@ -68,6 +68,7 @@ def compile(args):
     # Construct CFG basic blocks
     label_table = {} 
     cfg = Cfg()
+    cfg.add_basic_block(StartBlock())
     for lead_inst in leader:
         next_leader = leader.index(lead_inst)+1 
         
@@ -81,18 +82,20 @@ def compile(args):
         if isinstance(program.ast[ast_idx_next -1], Label):
             ast_idx_next -= 1
         
+        # Create a basic block containing instructions between the current 
+        # leader and the next leader
         block = BasicBlock(program.ast[ast_idx:ast_idx_next],)        
         cfg.add_basic_block(block)
         
         if ast_idx > 0 and isinstance(program.ast[ast_idx-1], Label):
             label = program.ast[ast_idx-1]
             block.attach_label(label)
-            label_table[label.name] = block 
+            label_table[label.name] = block         
+    cfg.add_basic_block(EndBlock())
         
-        # Block appears in its original program order        
-    
+    cfg.blocks[0].taken = cfg.blocks[1] 
     # Connect blocks in CFG
-    for block in cfg.blocks:
+    for block in cfg.blocks[1:-1]:
         idx = cfg.blocks.index(block)
         last_inst = block.instructions[-1]
          

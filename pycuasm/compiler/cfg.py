@@ -10,10 +10,17 @@ class Cfg():
         return pformat(self.blocks)
     
     def add_basic_block(self, block):
-        self.blocks.append(block)    
-    
-class BasicBlock():
+        self.blocks.append(block)
+
+class Block():
+    def __init__(self, taken=None, not_taken=None):
+        self.taken = taken
+        self.not_taken = not_taken
+
+class BasicBlock(Block):
     def __init__(self, instructions, label=None, taken=None, not_taken=None):
+        super().__init__(taken, not_taken)
+    
         if isinstance(instructions, list):
             self.instructions = instructions
         elif isinstance(instructions, Instruction):
@@ -22,8 +29,6 @@ class BasicBlock():
             raise ValueError("Invalid parameter")
     
         self.label = label
-        self.taken = taken
-        self.not_taken = not_taken
         self.condition = self.instructions[-1].condition
         
     def __repr__(self):
@@ -45,3 +50,11 @@ class BasicBlock():
         
     def attach_label(self, label):
         self.label = label
+
+class StartBlock(Block):
+    def __repr__(self):
+        return "<Start>"
+
+class EndBlock(Block):
+    def __repr__(self):
+        return "<End>"
