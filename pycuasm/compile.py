@@ -41,7 +41,9 @@ def compile(args):
     reg_scratch_map = dict.fromkeys(program.registers)    
             
     cfg = Cfg(program)
-    pprint(cfg)
+    print(cfg)
+    
+    pprint(reg_live_map)
             
 def test_lexer(sass):
     sass_lexer.input(sass.sass_raw)

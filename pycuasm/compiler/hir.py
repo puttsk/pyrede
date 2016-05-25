@@ -19,7 +19,7 @@ class Program(object):
                 if instCount % 3 == 0: 
                     addr += 8
                 
-                regs = [x for x in inst.operands if isinstance(x, Register) and not x.is_special]
+                regs = [x for x in inst.operands + [inst.dest] if isinstance(x, Register) and not x.is_special]
                 registers += [x for x in regs if x not in registers]
                 
             elif isinstance(inst, Label):
