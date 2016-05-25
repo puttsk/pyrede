@@ -2,7 +2,7 @@ import ply.lex as lex
 
 from pycuasm.compiler.settings import tokens, reserved
 
-literals = [',', ';','[',']', '{', '}', '@', '!', ':']
+literals = [',', ';','[',']', '{', '}', '@', '!', ':', '+', '-', '|']
 
 flag = r'[0-9,a-f,A-F,-]'
 
@@ -11,15 +11,15 @@ t_ignore  = ' \t'
 t_ignore_COMMENT = r'\#.*'
 
 def t_CONSTANT(t): 
-    r'c\[0x[0-9,abcdef,ABCDEF]+\]\[0x[0-9,abcdef,ABCDEF]+\]'
+    r'c\[0x[0-9abcdefABCDEF]+\]\[0x[0-9abcdefABCDEF]+\]'
     return t
 
 def t_HEXADECIMAL(t):
-    r'0x[0-9,abcdef,ABCDEF]+'
+    r'[-]?0x[0-9abcdefABCDEF]+(\.NEG)?'
     return t
 
 def t_FLAGS(t):
-    r'([0-9,a-f,A-F,-][0-9,a-f,A-F,-]):([0-9,a-f,A-F,-]):([0-9,a-f,A-F,-]):([Y-]):([0-9,a-f,A-F,-])'
+    r'([0-9a-fA-F-][0-9a-fA-F-]):([0-9a-fA-F-]):([0-9a-fA-F-]):([Y-]):([0-9a-fA-F-])'
     return t
 
 def t_PARAMETER(t):
@@ -39,12 +39,12 @@ def t_PREDICATE(t):
     return t
 
 def t_FLOAT(t):
-    r'-?\d+\.\d+'
+    r'[-]?\d+\.\d+(e[\+-]\d+)?'
     t.value = float(t.value)    
     return t
 
 def t_INTEGER(t):
-    r'-?\d+'
+    r'[-]?\d+'
     t.value = int(t.value)    
     return t
 

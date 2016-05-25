@@ -75,21 +75,39 @@ def p_operand(p):
                | special_register
                | immediate
                | pointer
-               | ID
+               | identifier
                | predicate
                | parameter
                | constant
+               | '{' INTEGER '}'
                | '{' INTEGER ',' INTEGER '}'
+               | '{' INTEGER ',' INTEGER ',' INTEGER '}'
+               | '{' INTEGER ',' INTEGER ',' INTEGER ',' INTEGER '}'
+               | '{' INTEGER ',' INTEGER ',' INTEGER ',' INTEGER ',' INTEGER '}'
     '''
     if len(p) == 2:
         p[0] = p[1]
     else:
         p[0] = p[1:len(p)]
 
+def p_identifier(p):
+    '''identifier : ID
+                  | '+' ID
+    '''
+    if len(p) == 2:
+        p[0] = p[1]
+    else:
+        p[0] = p[2]
+        
 def p_predicate(p):
     '''predicate : PREDICATE
+                 | '!' PREDICATE
     '''
-    p[0] = Predicate(p[1])
+    if len(p) == 2:
+        p[0] = Predicate(p[1])
+    else:
+        #TODO Predicate register as operand with !
+        p[0] = Predicate(p[2])
 
 def p_constant(p):
     '''constant : CONSTANT
@@ -114,11 +132,23 @@ def p_special_register(p):
 
 def p_register(p):
     '''register : REGISTER
+                | '|' REGISTER '|'
+                | '+' REGISTER
+                | '-' REGISTER  
     '''
-    p[0] = Register(p[1])
+    if len(p) == 2:
+        p[0] = Register(p[1])
+    else:
+        # TODO operand is register but contail ||, +, and -
+        if p[1] == '-':
+            p[0] = Register(p[2], is_negative = True)
+        else:
+            p[0] = Register(p[2])
+    
 
 def p_pointer(p):
     '''pointer      : '[' register ']'
+                    | '[' register '+' immediate ']'
     '''
     p[0] = Pointer(p[2])
 
@@ -142,7 +172,14 @@ def p_immediate_float(p):
 def p_immediate_hex(p):
     '''immediate_hex : HEXADECIMAL
     '''
-    p[0] = int(p[1], 16) 
+    hex = p[1].split('.')
+    if len(hex) == 2:
+        if hex[1] == 'NEG':
+            p[0] = -int(hex[0], 16)
+        else:
+            p[0] = int(hex[0], 16)
+    else:
+        p[0] = int(p[1], 16) 
 
 def p_error(p):
     print("Syntax error at line " + str(p.lineno))

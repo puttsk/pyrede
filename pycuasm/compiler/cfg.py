@@ -119,7 +119,7 @@ class Cfg(object):
                         block.connect_not_taken(label_table[last_inst.operands[0]]) 
                         block.connect_taken(self.blocks[idx+1] if idx < len(self.blocks)-1 else None)
                 else:
-                    block.taken = label_table[last_inst.operands[0]]
+                    block.connect_taken(label_table[last_inst.operands[0]])
 
 
 

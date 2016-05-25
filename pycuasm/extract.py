@@ -191,8 +191,8 @@ def extract(args):
 
     if kernelName == None:
         kernelName = list(cubin.kernels.keys())[0]
-        kernel = cubin.kernels[kernelName]
-            
+        
+    kernel = cubin.kernels[kernelName]
     sass = ""
     
     if args.cuobjdump:
@@ -201,7 +201,8 @@ def extract(args):
         sassFile.close()
     else:
         try:
-            cuobjdumpSass = subprocess.check_output([CUDA_BIN_DIR+'cuobjdump','-arch', "sm_"+str(cubin.arch),'-sass','-fun', kernelName, args.input_file], universal_newlines=True)
+            cuobjdump_cmd = [CUDA_BIN_DIR+'cuobjdump','-arch', "sm_"+str(cubin.arch),'-sass','-fun', kernelName, args.input_file]
+            cuobjdumpSass = subprocess.check_output(cuobjdump_cmd, universal_newlines=True, stderr=subprocess.STDOUT)
             sass = cuobjdumpSass.split('\n')
         except FileNotFoundError:
             print("cuobjdump does not exist in this system. Please install CUDA toolkits before using this tool.")

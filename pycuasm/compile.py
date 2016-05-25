@@ -38,12 +38,39 @@ def compile(args):
     pprint(program.ast)
     
     reg_live_map = dict.fromkeys(program.registers)
+    for k in reg_live_map:
+        reg_live_map[k] = []
+        
     reg_scratch_map = dict.fromkeys(program.registers)    
             
     cfg = Cfg(program)
-    print(cfg)
+    #print(cfg)
     
+    for block in cfg.blocks:
+        if not isinstance(block, BasicBlock):
+            continue
+            
+        for inst in block.instructions:
+            for operand in inst.operands:
+                op = operand
+                if isinstance(op, Pointer):
+                    op = op.register
+                if not isinstance(op, Register) or op.is_special:
+                    continue
+                
+                reg_scratch_map[op][1] = inst.addr
+                
+            if inst.opcode.reg_store and isinstance(inst.dest, Register):
+                if reg_scratch_map[inst.dest]:
+                    reg_live_map[inst.dest].append(tuple(reg_scratch_map[inst.dest]))
+                reg_scratch_map[inst.dest] = [inst.addr, -1]
+                 
+    for k in reg_scratch_map:
+        if reg_scratch_map[k] not in reg_live_map[k]:
+            reg_live_map[k].append(tuple(reg_scratch_map[k]))
+                
     pprint(reg_live_map)
+    
             
 def test_lexer(sass):
     sass_lexer.input(sass.sass_raw)

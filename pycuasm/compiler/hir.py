@@ -43,7 +43,7 @@ class Instruction(object):
             self.operands = operands[1:]
         
     def __str__(self):
-        return "%4x: %s %s\t%s %s %s" % ( self.addr,   
+        return "%4d: %s %s\t%s %s %s" % ( self.addr,   
                                     self.flags, 
                                     self.condition if self.condition else "", 
                                     self.opcode,
@@ -56,7 +56,7 @@ class Instruction(object):
 class Flags(object):
     def __init__(self, wait_barrier, read_barrier, write_barrier, yield_hint, stall):
         
-        self.wait_barrier = int(wait_barrier) if wait_barrier != '--' else 0
+        self.wait_barrier = int(wait_barrier, 16) if wait_barrier != '--' else 0
         """" Wait Dependency Barrier Flags
         Wait on a previously set barrier of either type. You can wait on more than 
         one barrier at at time so instead of working off the barrier number directly,
@@ -87,8 +87,7 @@ class Opcode(object):
     def __init__(self, opcode):
         name = opcode.split('.')
         self.name = name[0]
-        self.extension = name[1:]
-        self.full = opcode        
+        self.extension = name[1:]        
         
         if self.name not in SASS_GRAMMARS:
             raise ValueError("Invalid instruction: " + name)
@@ -100,7 +99,11 @@ class Opcode(object):
     
     def __repr__(self):
         return self.full 
-        
+    
+    @property
+    def full(self):
+        return self.name + '.'.join(self.extension)
+    
     @property
     def reg_store(self):
         return self.grammar.reg_store
@@ -148,7 +151,7 @@ class Predicate(object):
         return self.__str__()
 
 class Register(object):
-    def __init__(self, register, is_special = False):
+    def __init__(self, register, is_special = False, is_negative = False):
         name = register.split('.')
         
         self.full = register
@@ -156,6 +159,7 @@ class Register(object):
         self.extension = name[1:]
         self.reuse = True if 'reuse' in self.extension else False
         self.is_special = is_special
+        self.is_negative = is_negative
 
     def __hash__(self):
         return hash(self.name)
