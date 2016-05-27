@@ -61,7 +61,7 @@ class Cfg(object):
                     param = '<label> %s|' % (block.label if block.label else "")    
                     param += "{%s}" % block.get_node()
                     if block.condition:
-                        param += "|<branch> %s" % block.instructions[-1]
+                        param += "|<branch> %s" % block.instructions[-1].opcode
                     
                     node += '[shape=record, label="{%s}"]' % param;
             else:
@@ -71,12 +71,19 @@ class Cfg(object):
         for block in self.blocks:
             if block.taken:
                 if block.condition:
-                    nodes += 'block%s:branch -> block%s:label [label="taken", headport="ne", tailport="se"];\n' % (self.blocks.index(block), self.blocks.index(block.taken))
+                    nodes += 'block%s:branch -> block%s%s [label="taken", headport="ne", tailport="se"];\n' % (
+                        self.blocks.index(block),
+                        self.blocks.index(block.taken),
+                        ":label" if block.taken.label else "")
                 else:
                     nodes += 'block%s -> block%s;\n' % (self.blocks.index(block), self.blocks.index(block.taken))
             if block.not_taken:
                 if block.condition:
-                    nodes += 'block%s:branch -> block%s:label [label="not taken"];\n' % (self.blocks.index(block), self.blocks.index(block.not_taken))
+                    nodes += 'block%s:branch -> block%s%s [label="not taken"];\n' % (
+                        self.blocks.index(block),
+                        self.blocks.index(block.not_taken), 
+                        ":label" if block.not_taken.label else "")
+                        
                 else:
                     nodes += 'block%s -> block%s;\n' % (self.blocks.index(block), self.blocks.index(block.not_taken))
                 
