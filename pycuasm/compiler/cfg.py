@@ -50,7 +50,7 @@ class Cfg(object):
             repr += "\tPred:%s\n" % block.pred
         return repr
     
-    def create_dot_graph(self, outfile="path.dot"):
+    def create_dot_graph(self, outfile):
         nodes = ""
         for block in self.blocks:
             node = "block%d " % self.blocks.index(block)
@@ -159,7 +159,6 @@ class Cfg(object):
                         block.connect_taken(self.blocks[idx+1] if idx < len(self.blocks)-1 else None)
                 else:
                     block.connect_taken(label_table[last_inst.operands[0]])
-        self.create_dot_graph()
         
 class BasicBlock(Block):
     def __init__(self, instructions, label=None, taken=None, not_taken=None):

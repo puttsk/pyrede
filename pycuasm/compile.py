@@ -45,6 +45,7 @@ def compile(args):
             
     cfg = Cfg(program)
     #print(cfg)
+    cfg.create_dot_graph("cfg.dot")
     
     for block in cfg.blocks:
         if not isinstance(block, BasicBlock):
