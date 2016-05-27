@@ -69,8 +69,7 @@ def compile(args):
         if reg_scratch_map[k] not in reg_live_map[k]:
             reg_live_map[k].append(tuple(reg_scratch_map[k]))
                 
-    pprint(reg_live_map)
-    
+    #pprint(reg_live_map)
             
 def test_lexer(sass):
     sass_lexer.input(sass.sass_raw)
