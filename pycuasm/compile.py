@@ -35,7 +35,7 @@ def compile(args):
     program = sass_parser.parse(sass.sass_raw, lexer=sass_lexer)
    
     print("Register usage: %s" % program.registers)
-    pprint(program.ast)
+    #pprint(program.ast)
     
     reg_live_map = dict.fromkeys(program.registers)
     for k in reg_live_map:

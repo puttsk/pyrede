@@ -167,17 +167,15 @@ class Cfg(object):
         for block in self.__blocks:
             node = "block%d " % self.__blocks.index(block)
             if isinstance(block, BasicBlock):
-                if not block.condition and not block.label:
-                    node += '[shape=record, labeljust=l, label="{%s}"]' % (
-                        block.get_dot_node(), 
-                        )
-                else:
-                    param = '<label> %s|' % (block.label if block.label else "")    
-                    param += "{%s}" % block.get_dot_node()
-                    if block.condition:
-                        param += "|<branch> %s" % block.instructions[-1].opcode
-                    
-                    node += '[shape=record, label="{%s}"]' % param;
+
+                param = '<label> %s|' % (block.label if block.label else block.instructions[0].addr)
+                param += 'Live in: %s|' % (list(block.live_in) if block.live_in else "[]")    
+                param += "{%s}" % block.get_dot_node()
+                param += '| Live out: %s' % (list(block.live_out) if block.live_out else "[]")
+                if block.condition:
+                    param += "|<branch> %s" % block.instructions[-1].opcode
+                
+                node += '[shape=record, label="{%s}"]' % param;
             else:
                 node += '[labeljust=l, shape=rectangle, label="%s"]' % str(block)
             nodes += node + ";\n"
@@ -202,6 +200,8 @@ class Cfg(object):
                     nodes += 'block%s -> block%s;\n' % (self.__blocks.index(block), self.__blocks.index(block.not_taken))
                 
         dot = "digraph cfg{labeljust=l; %s }" % nodes
+        
+        print("Writing CFG to %s" % outfile)
         f = open(outfile, 'w')
         f.write(dot)
         f.close()
