@@ -38,8 +38,17 @@ def compile(args):
     pprint(program.ast)
                 
     cfg = Cfg(program)
+
+    for block in cfg.blocks:
+        pprint(block)
+        if not isinstance(block, BasicBlock):
+            continue
+        pprint(block.reg_usage)
+        pprint(block.live_in)
+        pprint(block.live_out)
+                
     cfg.create_dot_graph("cfg.dot")
-            
+                
 def test_lexer(sass):
     sass_lexer.input(sass.sass_raw)
     while True:

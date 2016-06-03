@@ -1,9 +1,23 @@
 from pprint import pformat, pprint
 from pycuasm.compiler.hir import *
 
+import json
+
 REL_OFFSETS = ['BRA', 'SSY', 'CAL', 'PBK', 'PCNT']
 ABS_OFFSETS = ['JCAL']
 JUMP_OPS = REL_OFFSETS + ABS_OFFSETS
+
+class RegisterAccess(object):
+    def __init__(self, first_read=-1, first_write=-1, next_write=-1, last_read=-1, read_count=0):
+        self.first_read = first_read
+        self.first_write = first_write
+        self.next_write = next_write
+        self.last_read = last_read
+        self.read_count = read_count
+        
+    def __repr__(self):
+        return "(FW:%s, FR:%s, NW:%s, LR:%s, CT:%s)" % (self.first_write, 
+            self.first_read, self.next_write, self.last_read, self.read_count) 
 
 class Block(object):
     def __init__(self, taken=None, not_taken=None):
@@ -11,12 +25,7 @@ class Block(object):
         self.__not_taken = not_taken
         self.__pred = []
         self.condition = None
-        
-        self.var_use = set()
-        self.var_def = set()
-        self.live_in = set()
-        self.live_out = set()
-        
+                
     @property    
     def taken(self):
         return self.__taken
@@ -64,6 +73,11 @@ class BasicBlock(Block):
         self.label = label
         self.condition = self.instructions[-1].condition
         
+        self.var_use = set()
+        self.var_def = set()
+        self.live_in = set()
+        self.live_out = set()
+        
         registers = []
         
         for inst in self.instructions:
@@ -74,10 +88,8 @@ class BasicBlock(Block):
                 raise ValueError("Invalid IR Type: %s %s" % (inst.__class__, inst))
 
         self.registers = registers
-        self.read_accesses = None
-        self.write_accesses = None
-        
-        self.__generate_access_map()
+        self.__analyze_use_def()
+        self.__analyze_reg_access()
         
     def __repr__(self):
         return "%s:%s" % (  
@@ -85,7 +97,36 @@ class BasicBlock(Block):
             self.instructions[-1].opcode.name,
         )
     
-    def __generate_access_map(self):
+    def __analyze_reg_access(self):
+        reg_access_map = dict.fromkeys(self.registers)
+        
+        for reg in reg_access_map:
+            reg_access_map[reg] = [RegisterAccess()]
+        
+        pprint(self)
+        pprint(self.live_in)
+             
+        for inst in self.instructions:
+            for operand in inst.operands:
+                op = operand
+                if isinstance(op, Pointer):
+                    op = op.register
+                if not isinstance(op, Register) or op.is_special:
+                    continue
+                
+                if reg_access_map[op][-1].first_read < 0:
+                    reg_access_map[op][-1].first_read = inst.addr 
+                reg_access_map[op][-1].last_read = inst.addr
+                reg_access_map[op][-1].read_count += 1
+                
+            if inst.opcode.reg_store and isinstance(inst.dest, Register):
+                if len(reg_access_map[inst.dest]) > 0:
+                    reg_access_map[inst.dest][-1].next_write = inst.addr
+                reg_access_map[inst.dest].append(RegisterAccess(first_write = inst.addr))
+                     
+        setattr(self, 'reg_usage', reg_access_map)
+    
+    def __analyze_use_def(self):
         reg_read_map = dict.fromkeys(self.registers)
         for k in reg_read_map:
             reg_read_map[k] = []
@@ -107,15 +148,12 @@ class BasicBlock(Block):
             if inst.opcode.reg_store and isinstance(inst.dest, Register):
                 reg_write_map[inst.dest].append(inst.addr)
         
-        self.read_accesses = reg_read_map
-        self.write_accesses = reg_write_map
-        
-        for reg in self.read_accesses.keys():
+        for reg in reg_read_map.keys():
             # First read is before first write
-            if self.read_accesses[reg] and self.write_accesses[reg] and self.read_accesses[reg][0] <= self.write_accesses[reg][0]:
+            if reg_read_map[reg] and reg_write_map[reg] and reg_read_map[reg][0] <= reg_write_map[reg][0]:
                 self.var_use.add(reg)
             
-            if self.write_accesses[reg] and len(self.write_accesses[reg]) > 0:
+            if reg_write_map[reg] and len(reg_write_map[reg]) > 0:
                 self.var_def.add(reg)
     
     def get_dot_node(self):
@@ -153,6 +191,10 @@ class Cfg(object):
             repr += "%s\n\t%s\n\t%s\n" % (block, block.taken, block.not_taken)
             repr += "\tPred:%s\n" % block.pred
         return repr
+    
+    @property
+    def blocks(self):
+        return self.__blocks
     
     def add_basic_block(self, block):
         self.__blocks.append(block)
@@ -307,6 +349,9 @@ class Cfg(object):
             node.live_out = set()
         while not converge:
             for node in sorted_block:
+                if not isinstance(node, BasicBlock):
+                    continue
+                    
                 setattr(node, 'old_live_in', node.live_in.copy())
                 setattr(node, 'old_live_out', node.live_out.copy())
                 node.live_out = (node.taken.live_in if node.taken else set()) | \
@@ -314,5 +359,7 @@ class Cfg(object):
                 node.live_in = node.var_use | (node.live_out - node.var_def)
             converge = True
             for node in sorted_block:
+                if not isinstance(node, BasicBlock):
+                    continue
                 if node.old_live_in != node.live_in:
                     converge = False    
