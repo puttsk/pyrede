@@ -45,6 +45,7 @@ def compile(args):
     rename_register(program, Register('R1'), Register('R7'))
                 
     cfg = Cfg(program)
+    cfg.create_dot_graph("cfg.dot")
 
     reg_usage_map = dict.fromkeys(program.registers)
     for reg in reg_usage_map:
@@ -63,9 +64,7 @@ def compile(args):
     spill_register_to_shared(program, Register('R4'), cfg, 256)
     spill_register_to_shared(program, Register('R6'), cfg, 256)
     
-    program.save('new.sass')
-                                                  
-    cfg.create_dot_graph("cfg.dot")
+    program.save('out.sass')               
                 
 def test_lexer(sass):
     sass_lexer.input(sass.sass_raw)
