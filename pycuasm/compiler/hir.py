@@ -1,10 +1,17 @@
+import json
+
 from enum import Enum
 from pycuasm.compiler.grammar import SASS_GRAMMARS
 
 class Program(object):
     def __init__(self, ast):
         self.ast = ast
+        self.constants = None
+        self.header = None
         
+        self.update()
+    
+    def update(self):
         #Update AST and build register table
         registers = []
         
@@ -28,6 +35,20 @@ class Program(object):
                 raise ValueError("Unknown IR Type: %s %s" % (inst.__class__, inst))
 
         self.registers = registers
+    
+    def save(self, outfile):
+        f = open(outfile, 'w')
+        f.writelines(self.header)
+        
+        f.write("\n<CONSTANT_MAPPING>\n")
+        for const in self.constants:
+            f.write("\t%s : %s\n" % (const, self.constants[const])) 
+        f.write("</CONSTANT_MAPPING>\n\n")
+        
+        for inst in self.ast:  
+            f.write(str(inst) + '\n')
+        f.close()
+            
 
 class Instruction(object):
     def __init__(self, flags, opcode, operands=None, condition=None):
@@ -43,15 +64,15 @@ class Instruction(object):
             self.operands = operands[1:]
         
     def __str__(self):
-        return "%4d: %s %s\t%s %s %s" % ( self.addr,   
-                                    self.flags, 
+        return "%s %s\t%s%s%s;" % (self.flags, 
                                     self.condition if self.condition else "", 
                                     self.opcode,
-                                    self.dest if self.dest else "",
-                                    self.operands)
+                                    (" " + str(self.dest) + ',') if self.dest else "",
+                                    (" " + ", ".join([str(x) for x in self.operands])) if self.operands else ""
+                                    )
 
     def __repr__(self):
-        return self.__str__()
+        return "%4d: %s" % (self.addr, self.__str__())
 
 class Flags(object):
     def __init__(self, wait_barrier, read_barrier, write_barrier, yield_hint, stall):
@@ -75,11 +96,11 @@ class Flags(object):
         self.stall = int(stall, 16)
     
     def __str__(self):
-        return "%d:%d:%d:%d:%x" % (
-            self.wait_barrier,
-            self.read_barrier,
-            self.write_barrier,
-            self.yield_hint,
+        return "%s:%s:%s:%s:%x" % (
+            ("%02d" % self.wait_barrier) if self.wait_barrier != 0 else '--',
+            self.read_barrier if self.read_barrier != 0 else '-',
+            self.write_barrier if self.write_barrier != 0 else '-',
+            'Y' if self.yield_hint != 0 else '-',
             self.stall
         )
 
@@ -102,7 +123,7 @@ class Opcode(object):
     
     @property
     def full(self):
-        return self.name + '.'.join(self.extension)
+        return '.'.join([self.name] + self.extension)
     
     @property
     def reg_store(self):
@@ -125,17 +146,19 @@ class Label(object):
         self.addr = 0
 
     def __str__(self):
-        return "[%d]%s" % (self.addr, self.name)
+        return "%s:" % self.name
     
     def __repr__(self):
-        return self.__str__()
+        return "[%d]%s" % (self.addr, self.name)
         
 class Pointer(object):
-    def __init__(self, register):
+    def __init__(self, register, offset=0):
         self.register = register
+        self.offset = offset
         
     def __str__(self):
-        return "[%s]" % self.register
+        return "[%s%s]" % (self.register, 
+                            ("+" + str(self.offset)) if self.offset != 0 else "")
 
     def __repr__(self):
         return self.__str__()        
@@ -150,28 +173,49 @@ class Predicate(object):
     def __repr__(self):
         return self.__str__()
 
+class Identifier(object):
+    def __init__(self, name):
+        self.name = name
+
+    def __str__(self):
+        return self.name
+    
+    def __repr__(self):
+        return self.__str__()
+
 class Register(object):
     def __init__(self, register, is_special = False, is_negative = False):
         name = register.split('.')
         
-        self.full = register
         self.name = name[0]
         self.extension = name[1:]
         self.reuse = True if 'reuse' in self.extension else False
         self.is_special = is_special
         self.is_negative = is_negative
 
+    @property
+    def full(self):
+        return "%s%s%s" % (self.name, '.' if self.extension else '', '.'.join(self.extension))
+
     def __hash__(self):
         return hash(self.name)
 
     def __str__(self):
-        return "%s" % self.name
+        return "%s" % self.full
     
     def __repr__(self):
         return self.full   
     
     def __eq__(self, other):
+        if not isinstance(other, Register):
+            return False
         return self.name == other.name
+    
+    def rename(self, new_name):
+        if isinstance(new_name, Register):
+            self.name = new_name.name
+        elif isinstance(name, str):
+            self.name = new_name
     
 class Constant(object):
     def __init__(self, name, is_param = False):

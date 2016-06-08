@@ -182,7 +182,7 @@ class Cfg(object):
         """
         self.__blocks = []
         if program:
-            self.create_cfg(program)    
+            self.update_cfg(program)    
             self.analyze_liveness();
     
     def __repr__(self):
@@ -248,7 +248,7 @@ class Cfg(object):
         f.write(dot)
         f.close()
         
-    def create_cfg(self, program):
+    def update_cfg(self, program):
         """ Building CFG for a program
             
             Args:
@@ -316,13 +316,13 @@ class Cfg(object):
             elif last_inst.opcode.name in JUMP_OPS:
                 if block.condition:
                     if block.condition.condition:
-                        block.connect_taken(label_table[last_inst.operands[0]]) 
+                        block.connect_taken(label_table[last_inst.operands[0].name]) 
                         block.connect_not_taken(self.__blocks[idx+1] if idx < len(self.__blocks)-1 else None)
                     else:
-                        block.connect_not_taken(label_table[last_inst.operands[0]]) 
+                        block.connect_not_taken(label_table[last_inst.operands[0].name]) 
                         block.connect_taken(self.__blocks[idx+1] if idx < len(self.__blocks)-1 else None)
                 else:
-                    block.connect_taken(label_table[last_inst.operands[0]])
+                    block.connect_taken(label_table[last_inst.operands[0].name])
         
     def analyze_liveness(self):
         """ Perform liveness analysis

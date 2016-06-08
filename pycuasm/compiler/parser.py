@@ -95,9 +95,9 @@ def p_identifier(p):
                   | '+' ID
     '''
     if len(p) == 2:
-        p[0] = p[1]
+        p[0] = Identifier(p[1])
     else:
-        p[0] = p[2]
+        p[0] = Identifier(p[2])
         
 def p_predicate(p):
     '''predicate : PREDICATE
