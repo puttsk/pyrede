@@ -41,7 +41,7 @@ def compile(args):
     print("Register usage: %s" % program.registers)
     pprint(program.ast)
                 
-    rename_register(program, Register('R0'), Register('R6'))
+    rename_register(program, Register('R0'), Register('R8'))
     rename_register(program, Register('R1'), Register('R7'))
                 
     cfg = Cfg(program)
@@ -61,8 +61,8 @@ def compile(args):
     
     pprint(reg_usage_map)
     
-    spill_register_to_shared(program, Register('R4'), cfg, 256)
-    spill_register_to_shared(program, Register('R6'), cfg, 256)
+    spill_register_to_shared(program, Register('R8'), cfg, 256)
+    #spill_register_to_shared(program, Register('R6'), cfg, 256)
     
     program.save('out.sass')               
                 

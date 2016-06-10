@@ -97,12 +97,15 @@ class Flags(object):
     
     def __str__(self):
         return "%s:%s:%s:%s:%x" % (
-            ("%02d" % self.wait_barrier) if self.wait_barrier != 0 else '--',
+            ("%02x" % self.wait_barrier) if self.wait_barrier != 0 else '--',
             self.read_barrier if self.read_barrier != 0 else '-',
             self.write_barrier if self.write_barrier != 0 else '-',
             'Y' if self.yield_hint != 0 else '-',
             self.stall
         )
+        
+    def __repr__(self):
+        return self.__str__()
 
 class Opcode(object):
     def __init__(self, opcode):
