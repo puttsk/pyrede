@@ -41,9 +41,9 @@ def compile(args):
     print("Register usage: %s" % program.registers)
     pprint(program.ast)
                 
-    rename_register(program, Register('R0'), Register('R8'))
-    rename_register(program, Register('R1'), Register('R7'))
-                
+    #rename_register(program, Register('R0'), Register('R49'))
+    #rename_register(program, Register('R1'), Register('R50'))
+     
     cfg = Cfg(program)
     cfg.create_dot_graph("cfg.dot")
 
@@ -61,8 +61,20 @@ def compile(args):
     
     pprint(reg_usage_map)
     
-    spill_register_to_shared(program, Register('R8'), cfg, 256)
-    #spill_register_to_shared(program, Register('R6'), cfg, 256)
+    spill_register_to_shared(program, Register('R48'), cfg, 256)
+    spill_register_to_shared(program, Register('R47'), cfg, 256)
+    spill_register_to_shared(program, Register('R46'), cfg, 256)
+    spill_register_to_shared(program, Register('R45'), cfg, 256)
+    spill_register_to_shared(program, Register('R44'), cfg, 256)
+    spill_register_to_shared(program, Register('R43'), cfg, 256)
+    spill_register_to_shared(program, Register('R42'), cfg, 256)
+    spill_register_to_shared(program, Register('R41'), cfg, 256)
+    spill_register_to_shared(program, Register('R40'), cfg, 256)
+    spill_register_to_shared(program, Register('R39'), cfg, 256)
+    spill_register_to_shared(program, Register('R38'), cfg, 256)
+    spill_register_to_shared(program, Register('R37'), cfg, 256)
+    rename_register(program, Register('R49'), Register('R37'))
+    rename_register(program, Register('R50'), Register('R38'))
     
     program.save('out.sass')               
                 
@@ -78,5 +90,6 @@ def test_lexer(sass):
                 
         
         
+    
     
     

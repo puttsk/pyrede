@@ -102,10 +102,7 @@ class BasicBlock(Block):
         
         for reg in reg_access_map:
             reg_access_map[reg] = [RegisterAccess()]
-        
-        pprint(self)
-        pprint(self.live_in)
-             
+                     
         for inst in self.instructions:
             for operand in inst.operands:
                 op = operand
@@ -329,8 +326,8 @@ class Cfg(object):
         """
         # Generate a list of BasicBlock in reverse order
         sorted_block = [self.__blocks[-1]] 
-        while not isinstance(sorted_block[-1], StartBlock):
-            curBlock = sorted_block[-1]
+        while len(sorted_block) > 0:
+            curBlock = sorted_block.pop()
             # Tag node as visited
             setattr(curBlock, 'visited',True)
             for pred in curBlock.pred:

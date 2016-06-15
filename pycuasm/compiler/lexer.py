@@ -31,7 +31,7 @@ def t_SPECIAL_REGISTER(t):
     return t
 
 def t_REGISTER(t):
-    r'R\d+(\.\w+)?'
+    r'R\d+(\.\w+)?(\.\w+)?'
     return t
 
 def t_PREDICATE(t):
