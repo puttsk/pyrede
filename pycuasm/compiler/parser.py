@@ -79,17 +79,23 @@ def p_operand(p):
                | predicate
                | parameter
                | constant
-               | '{' INTEGER '}'
-               | '{' INTEGER ',' INTEGER '}'
-               | '{' INTEGER ',' INTEGER ',' INTEGER '}'
-               | '{' INTEGER ',' INTEGER ',' INTEGER ',' INTEGER '}'
-               | '{' INTEGER ',' INTEGER ',' INTEGER ',' INTEGER ',' INTEGER '}'
+               | '{' integer_list '}'
     '''
     if len(p) == 2:
         p[0] = p[1]
     else:
         p[0] = p[1:len(p)]
 
+def p_integter_list(p):
+    '''integer_list : INTEGER
+                    | integer_list ',' INTEGER 
+    '''
+    if len(p) == 2 :
+        p[0] = [p[1]]
+    else:
+        p[1].append(p[3])
+        p[0] = p[1]
+    
 def p_identifier(p):
     '''identifier : ID
                   | '+' ID
