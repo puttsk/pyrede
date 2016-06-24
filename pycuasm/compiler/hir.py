@@ -167,11 +167,12 @@ class Pointer(object):
         return self.__str__()        
 
 class Predicate(object):
-    def __init__(self, name):
+    def __init__(self, name, is_inverse=False):
         self.name = name
+        self.is_inverse = is_inverse
 
     def __str__(self):
-        return self.name
+        return "%s%s" % ('!' if self.is_inverse else '', self.name)
     
     def __repr__(self):
         return self.__str__()
@@ -187,7 +188,7 @@ class Identifier(object):
         return self.__str__()
 
 class Register(object):
-    def __init__(self, register, is_special = False, is_negative = False):
+    def __init__(self, register, is_special = False, is_negative = False, is_absolute = False):
         name = register.split('.')
         
         self.name = name[0]
@@ -195,10 +196,11 @@ class Register(object):
         self.reuse = True if 'reuse' in self.extension else False
         self.is_special = is_special
         self.is_negative = is_negative
+        self.is_absolute = is_absolute
 
     @property
     def full(self):
-        return "%s%s%s" % (self.name, '.' if self.extension else '', '.'.join(self.extension))
+        return "%s%s%s%s%s%s" % ('|' if self.is_absolute else '','-' if self.is_negative else '',self.name, '.' if self.extension else '', '.'.join(self.extension), '|' if self.is_absolute else '')
 
     def __hash__(self):
         return hash(self.name)

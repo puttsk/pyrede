@@ -83,6 +83,7 @@ class BasicBlock(Block):
         for inst in self.instructions:
             if isinstance(inst, Instruction):
                 regs = [x for x in inst.operands + [inst.dest] if isinstance(x, Register) and not x.is_special]
+                regs += [x.register for x in inst.operands + [inst.dest] if isinstance(x, Pointer)]
                 registers += [x for x in regs if x not in registers]
             else:
                 raise ValueError("Invalid IR Type: %s %s" % (inst.__class__, inst))

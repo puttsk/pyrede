@@ -112,8 +112,7 @@ def p_predicate(p):
     if len(p) == 2:
         p[0] = Predicate(p[1])
     else:
-        #TODO Predicate register as operand with !
-        p[0] = Predicate(p[2])
+        p[0] = Predicate(p[2], is_inverse=True)
 
 def p_constant(p):
     '''constant : CONSTANT
@@ -145,18 +144,23 @@ def p_register(p):
     if len(p) == 2:
         p[0] = Register(p[1])
     else:
-        # TODO operand is register but contail ||, +, and -
         if p[1] == '-':
             p[0] = Register(p[2], is_negative = True)
-        else:
+        elif p[1] == '|' and p[3] == '|':
+            p[0] = Register(p[2], is_absolute = True)
+        elif p[1] == '+':
             p[0] = Register(p[2])
-    
+        else:
+            raise SyntaxError(p)
 
 def p_pointer(p):
     '''pointer      : '[' register ']'
                     | '[' register '+' immediate ']'
     '''
-    p[0] = Pointer(p[2])
+    if len(p) == 4:
+        p[0] = Pointer(p[2])
+    else:
+        p[0] = Pointer(p[2], p[4])
 
 def p_immediate(p):
     '''immediate    : immediate_int
