@@ -73,6 +73,10 @@ class Instruction(object):
 
     def __repr__(self):
         return "%4d: %s" % (self.addr, self.__str__())
+        
+    @property
+    def reg_store(self):
+        return self.opcode.reg_store
 
 class Flags(object):
     def __init__(self, wait_barrier, read_barrier, write_barrier, yield_hint, stall):
@@ -155,9 +159,10 @@ class Label(object):
         return "[%d]%s" % (self.addr, self.name)
         
 class Pointer(object):
-    def __init__(self, register, offset=0):
+    def __init__(self, register, offset=0, is_64bit=False):
         self.register = register
         self.offset = offset
+        self.is_64bit = is_64bit
         
     def __str__(self):
         return "[%s%s]" % (self.register, 

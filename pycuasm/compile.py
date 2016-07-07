@@ -6,7 +6,7 @@ from pycuasm.compiler.lexer import sass_lexer
 from pycuasm.compiler.parser import sass_parser 
 from pycuasm.compiler.hir import *
 from pycuasm.compiler.cfg import *
-from pycuasm.compiler.transform import spill_register_to_shared, rename_register
+from pycuasm.compiler.transform import spill_register_to_shared, rename_register, rename_registers
 
 class Sass():
     def __init__(self, sass_file):
@@ -39,10 +39,10 @@ def compile(args):
     program.header = sass.header
     
     print("Register usage: %s" % program.registers)
-    pprint(program.ast)
+    #pprint(program.ast)
                 
-    #rename_register(program, Register('R0'), Register('R49'))
-    #rename_register(program, Register('R1'), Register('R50'))
+    rename_register(program, Register('R0'), Register('R68'))
+    rename_register(program, Register('R1'), Register('R69'))
      
     cfg = Cfg(program)
     cfg.create_dot_graph("cfg.dot")
@@ -56,25 +56,40 @@ def compile(args):
             continue
         for reg in block.reg_usage:
             reg_usage_map[reg] += block.reg_usage[reg]
+            
+        pprint(block.pointer_accesses)
     
     shared_candidates = list(sorted(reg_usage_map, key=lambda k: len(reg_usage_map[k])))
     
-    pprint(reg_usage_map)
+    pprint(shared_candidates)
     
-    #spill_register_to_shared(program, Register('R48'), cfg, 256)
-    #spill_register_to_shared(program, Register('R47'), cfg, 256)
-    #spill_register_to_shared(program, Register('R46'), cfg, 256)
-    #spill_register_to_shared(program, Register('R45'), cfg, 256)
-    #spill_register_to_shared(program, Register('R44'), cfg, 256)
-    #spill_register_to_shared(program, Register('R43'), cfg, 256)
-    #spill_register_to_shared(program, Register('R42'), cfg, 256)
-    #spill_register_to_shared(program, Register('R41'), cfg, 256)
-    #spill_register_to_shared(program, Register('R40'), cfg, 256)
-    #spill_register_to_shared(program, Register('R39'), cfg, 256)
-    #spill_register_to_shared(program, Register('R38'), cfg, 256)
-    #spill_register_to_shared(program, Register('R37'), cfg, 256)
-    #rename_register(program, Register('R49'), Register('R37'))
-    #rename_register(program, Register('R50'), Register('R38'))
+    #spill_register_to_shared(program, Register('R67'), cfg, 192)
+    spill_register_to_shared(program, Register('R22'), cfg, 192)
+    spill_register_to_shared(program, Register('R35'), cfg, 192)
+    #spill_register_to_shared(program, Register('R66'), cfg, 192)
+    #TODO: Check Illegal address
+    #spill_register_to_shared(program, Register('R19'), cfg, 192)
+    #TODO: Check Illegal address 
+    #spill_register_to_shared(program, Register('R15'), cfg, 192)
+    spill_register_to_shared(program, Register('R23'), cfg, 192)
+    spill_register_to_shared(program, Register('R39'), cfg, 192)
+    spill_register_to_shared(program, Register('R38'), cfg, 192)
+    spill_register_to_shared(program, Register('R37'), cfg, 192)
+    #TODO: Incorrect result
+    #spill_register_to_shared(program, Register('R36'), cfg, 192)
+    #spill_register_to_shared(program, Register('R64'), cfg, 192)
+    #TODO: Incorrect result
+    #spill_register_to_shared(program, Register('R32'), cfg, 192)
+    #TODO: Incorrect result
+    #spill_register_to_shared(program, Register('R34'), cfg, 192)
+    #TODO: Check Illegal address
+    #spill_register_to_shared(program, Register('R17'), cfg, 192)
+    #spill_register_to_shared(program, Register('R65'), cfg, 192)
+    #TODO: Incorrect result
+    #spill_register_to_shared(program, Register('R33'), cfg, 192)
+    
+    #rename_register(program, Register('R68'), Register('R67'))
+    #rename_register(program, Register('R69'), Register('R66'))    
     
     program.save('out.sass')               
                 

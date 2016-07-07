@@ -79,16 +79,21 @@ class BasicBlock(Block):
         self.live_out = set()
         
         registers = []
+        pointers = []
         
         for inst in self.instructions:
             if isinstance(inst, Instruction):
                 regs = [x for x in inst.operands + [inst.dest] if isinstance(x, Register) and not x.is_special]
                 regs += [x.register for x in inst.operands + [inst.dest] if isinstance(x, Pointer)]
                 registers += [x for x in regs if x not in registers]
+                
+                ptrs = [x for x in inst.operands + [inst.dest] if isinstance(x, Pointer)]
+                pointers += [x for x in ptrs if x not in pointers]
             else:
                 raise ValueError("Invalid IR Type: %s %s" % (inst.__class__, inst))
 
         self.registers = registers
+        self.pointer_accesses = pointers
         self.__analyze_use_def()
         self.__analyze_reg_access()
         
