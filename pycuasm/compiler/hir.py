@@ -135,7 +135,11 @@ class Opcode(object):
     @property
     def reg_store(self):
         return self.grammar.reg_store
-
+        
+    @property
+    def type(self):
+        return self.grammar.type
+        
 class Condition(object):
     def __init__(self, predicate, condition=True):
         self.predicate = predicate

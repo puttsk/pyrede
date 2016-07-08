@@ -2,6 +2,8 @@ import copy
 
 from pprint import pprint
 from pycuasm.compiler.hir import *
+from pycuasm.compiler.analysis import collect_64bit_registers
+
 
 # Register R0 and R1 are reserved for register spilling to shared memory
 SPILL_REGISTER_ADDR = Register('R0')
@@ -9,38 +11,93 @@ SPILL_REGISTER = Register('R1')
 
 #TODO: Bug
 def relocate_registers(program):
+    reg64_dict = collect_64bit_registers(program)
     registers_dict = {}
     register_counter = 0
-    
+
+    # Reassign registers        
     for inst in program.ast:
         if not isinstance(inst, Instruction):
             continue
         for op in inst.operands:
+            reg = None
             if isinstance(op, Pointer):
-                if op.register.name not in registers_dict:
-                    pprint((op.register.name, "R%d" % register_counter))
-                    registers_dict[op.register.name] = "R%d" % register_counter
-                    register_counter = register_counter + 1
+                reg = op.register
             elif isinstance(op, Register) and not op.is_special:
-                if op.name not in registers_dict:
-                    pprint((op.name, "R%d" % register_counter))
-                    registers_dict[op.name] = "R%d" % register_counter
+                reg = op
+            else:
+                continue
+                
+            if reg.name not in registers_dict:
+                # Check if reg is 64-bit reg
+                if reg.name in reg64_dict:
+                    # 64-bit reg
+                    reg_id = int(reg.name.replace('R',''))
+                    couple_reg_name = reg64_dict[reg.name]
+                    couple_reg_id = int(couple_reg_name.replace('R',''))
+                    
+                    if couple_reg_id > reg_id:
+                        pprint((reg.name, "R%d" % register_counter))
+                        registers_dict[reg.name] = "R%d" % register_counter
+                        register_counter = register_counter + 1
+                        pprint((couple_reg_name, "R%d" % register_counter))
+                        registers_dict[couple_reg_name] = "R%d" % register_counter
+                        register_counter = register_counter + 1
+                    else:
+                        pprint((couple_reg_name, "R%d" % register_counter))
+                        registers_dict[couple_reg_name] = "R%d" % register_counter
+                        register_counter = register_counter + 1
+                        pprint((reg.name, "R%d" % register_counter))
+                        registers_dict[reg.name] = "R%d" % register_counter
+                        register_counter = register_counter + 1     
+                else:
+                    pprint((reg.name, "R%d" % register_counter))
+                    registers_dict[reg.name] = "R%d" % register_counter
                     register_counter = register_counter + 1
                 
         if isinstance(inst.dest, Pointer):
-            if inst.dest.register.name not in registers_dict:
-                pprint((inst.dest.register.name, "R%d" % register_counter))
-                registers_dict[inst.dest.register.name] = "R%d" % register_counter
-                register_counter = register_counter + 1
+            reg = inst.dest.register
         elif isinstance(inst.dest, Register):
-            if inst.dest.name not in registers_dict:
-                pprint((inst.dest.name, "R%d" % register_counter))
-                registers_dict[inst.dest.name] = "R%d" % register_counter
-                register_counter = register_counter + 1
+            reg = inst.dest
+        else:
+            continue
+            
+        if reg.name not in registers_dict:
+                # Check if reg is 64-bit reg
+                if reg.name in reg64_dict:
+                    # 64-bit reg
+                    reg_id = int(reg.name.replace('R',''))
+                    couple_reg_name = reg64_dict[reg.name]
+                    couple_reg_id = int(couple_reg_name.replace('R',''))
+                    
+                    if couple_reg_id > reg_id:
+                        pprint((reg.name, "R%d" % register_counter))
+                        registers_dict[reg.name] = "R%d" % register_counter
+                        register_counter = register_counter + 1
+                        pprint((couple_reg_name, "R%d" % register_counter))
+                        registers_dict[couple_reg_name] = "R%d" % register_counter
+                        register_counter = register_counter + 1
+                    else:
+                        pprint((couple_reg_name, "R%d" % register_counter))
+                        registers_dict[couple_reg_name] = "R%d" % register_counter
+                        register_counter = register_counter + 1
+                        pprint((reg.name, "R%d" % register_counter))
+                        registers_dict[reg.name] = "R%d" % register_counter
+                        register_counter = register_counter + 1     
+                else:
+                    pprint((reg.name, "R%d" % register_counter))
+                    registers_dict[reg.name] = "R%d" % register_counter
+                    register_counter = register_counter + 1
     
     rename_registers(program, registers_dict)
-
+    
 def rename_registers(program, registers_dict):
+    """ Renaming registers in a program using rules in registers_dict 
+        
+        Args:
+            program (Program): Target program for register renaming
+            registers_dict (dict{str:str}): A dictionary containing a renaming rules. The key represent the old register name and a value contain new register name 
+    """
     print("Renaming using dict:" )
     pprint(registers_dict)
     pprint(len(registers_dict))
@@ -65,11 +122,26 @@ def rename_registers(program, registers_dict):
     program.update()
 
 def rename_register(program, old_reg, new_reg):
+    """ Replacing a register old_reg with a register new_reg in a program 
+        
+        Args:
+            program (Program): target program for register renaming
+            old_reg (Register): An original name of the register 
+            new_reg (Register): A new name for the register 
+    """
     print("Renaming %s to %s" % (old_reg, new_reg))
     rename_registers(program, {old_reg.name:new_reg.name})
     
 
 def spill_register_to_shared(program, spilled_register, cfg, thread_block_size=256):
+    """ Spill registers to shared memory 
+        
+        Args:
+            program (Program): target program for register spilling
+            spilled_register (Register): A register to be spilled  
+            cfg (Cfg): A CFG of the input program
+            thread_block_size (int): Size of thread block  
+    """
     # TODO: Find free barrier for LDS Instruction
     print("Replacing %s with shared memory (TB:%d)" % (spilled_register, thread_block_size))
     
