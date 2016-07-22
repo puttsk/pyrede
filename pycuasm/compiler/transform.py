@@ -100,7 +100,6 @@ def rename_registers(program, registers_dict):
     """
     print("Renaming using dict:" )
     pprint(registers_dict)
-    pprint(len(registers_dict))
     for inst in program.ast:
         if not isinstance(inst, Instruction):
             continue
@@ -183,11 +182,15 @@ def spill_register_to_shared(program, spilled_register, cfg, thread_block_size=2
         
     load_shr_inst = Instruction(Flags('--','1','2','-','d'), 
                         Opcode('LDS'),
-                        operands=[SPILL_REGISTER, Pointer(SPILL_REGISTER_ADDR, spill_offset)])
+                        operands=[SPILL_REGISTER, Pointer(SPILL_REGISTER_ADDR, spill_offset),
+                            #Register(spilled_register.name + 'S')
+                        ])
     
     store_shr_inst = Instruction(Flags('--','-','-','-','d'), 
                         Opcode('STS'),
-                        operands=[Pointer(SPILL_REGISTER_ADDR, spill_offset), SPILL_REGISTER])
+                        operands=[Pointer(SPILL_REGISTER_ADDR, spill_offset), SPILL_REGISTER, 
+                            #Register(spilled_register.name + 'S')
+                        ])
     
     w_count = 0
     r_count = 0
@@ -232,8 +235,9 @@ def spill_register_to_shared(program, spilled_register, cfg, thread_block_size=2
             if spilled_register == inst.dest:
                 # Write access
                 w_count = w_count + 1
-                inst.dest.rename(SPILL_REGISTER)
                 st_inst = copy.deepcopy(store_shr_inst)
+                inst.dest.rename(SPILL_REGISTER)
+                
                 # Set wait flag if the previous instruction sets write dependence flag. 
                 # This will happen if the instruction store data in the spilled register.
                 # Add 1 additional cycle to the store instruction. 

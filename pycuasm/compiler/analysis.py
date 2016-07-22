@@ -6,12 +6,28 @@ def collect_64bit_registers(program):
     registers_dict = {}
     register_counter = 0
     
+    reg64 = set()
+    
     # Detecting 64-bit accesses
-    for inst in program.ast:
-        if not isinstance(inst, Instruction):
-            continue
-        
-        if inst.opcode.type == 'gmem':
+    for inst in [x for x in program.ast if isinstance(x, Instruction)]:
+        if inst.opcode.type == 'x32' and inst.opcode.integer_inst and inst.opcode.reg_store:
+            if inst.dest.name == 'R14':
+                pprint(inst)
+            if inst.dest.carry_bit:
+                opcode = inst.opcode
+                inst_pos = program.ast.index(inst)
+                
+                for next_inst in [x for x in program.ast[inst_pos:] if isinstance(x, Instruction)]:
+                    if next_inst.opcode.use_carry_bit:
+                        reg64.add((inst.dest.name, next_inst.dest.name))
+                        break
+                
+    return reg64
+    
+def collect_global_memory_access(program):
+    mem_reg = set()
+    for inst in [x for x in program.ast if isinstance(x, Instruction)]:
+        if inst.opcode.type == 'gmem' or inst.opcode.type == 'x64':
             main_reg = None
             if inst.opcode.name.find('LD') != -1:
                 # Load instruction   
@@ -24,8 +40,6 @@ def collect_64bit_registers(program):
                 main_reg_id = int(main_reg.name.replace('R',''))
                 couple_reg_id = main_reg_id + 1
                 couple_reg = "R%d" % couple_reg_id
-                 
-                reg64_dict[main_reg.name] = couple_reg
-                reg64_dict[couple_reg] = main_reg.name 
-    
-    return reg64_dict
+                    
+                mem_reg.add((main_reg.name, couple_reg))
+    return mem_reg

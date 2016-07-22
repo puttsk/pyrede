@@ -1,4 +1,5 @@
 import json
+import copy
 
 from enum import Enum
 from pycuasm.compiler.grammar import SASS_GRAMMARS
@@ -27,7 +28,7 @@ class Program(object):
                     addr += 8
                 
                 regs = [x for x in inst.operands + [inst.dest] if isinstance(x, Register) and not x.is_special]
-                registers += [x for x in regs if x not in registers]
+                registers += sorted([x.name for x in regs if x.name not in registers])
                 
             elif isinstance(inst, Label):
                 inst.addr = addr
@@ -72,7 +73,7 @@ class Instruction(object):
                                     )
 
     def __repr__(self):
-        return "%4d: %s" % (self.addr, self.__str__())
+        return "%4x: %s" % (self.addr, self.__str__())
         
     @property
     def reg_store(self):
@@ -116,6 +117,7 @@ class Opcode(object):
         name = opcode.split('.')
         self.name = name[0]
         self.extension = name[1:]        
+        self.use_carry_bit = 'X' in self.extension
         
         if self.name not in SASS_GRAMMARS:
             raise ValueError("Invalid instruction: " + name)
@@ -139,6 +141,18 @@ class Opcode(object):
     @property
     def type(self):
         return self.grammar.type
+        
+    @property
+    def integer_inst(self):
+        return self.grammar.integer_inst
+        
+    @property
+    def float_inst(self):
+        return self.grammar.float_inst
+        
+    @property
+    def is_64(self):
+        return self.grammar.is_64
         
 class Condition(object):
     def __init__(self, predicate, condition=True):
@@ -200,22 +214,24 @@ class Register(object):
     def __init__(self, register, is_special = False, is_negative = False, is_absolute = False):
         name = register.split('.')
         
-        self.name = name[0]
-        self.extension = name[1:]
+        self.name = copy.deepcopy(name[0])
+        self.extension = copy.deepcopy(name[1:])
         self.reuse = True if 'reuse' in self.extension else False
         self.is_special = is_special
         self.is_negative = is_negative
         self.is_absolute = is_absolute
+        
+        self.carry_bit = 'CC' in self.extension
 
     @property
     def full(self):
-        return "%s%s%s%s%s%s" % ('|' if self.is_absolute else '','-' if self.is_negative else '',self.name, '.' if self.extension else '', '.'.join(self.extension), '|' if self.is_absolute else '')
+        return "%s%s%s" % (self.name, '.' if self.extension else '', '.'.join(self.extension))
 
     def __hash__(self):
         return hash(self.name)
 
     def __str__(self):
-        return "%s" % self.full
+        return "%s%s%s%s%s%s" % ('|' if self.is_absolute else '','-' if self.is_negative else '',self.name, '.' if self.extension else '', '.'.join(self.extension), '|' if self.is_absolute else '')
     
     def __repr__(self):
         return self.full   

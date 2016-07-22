@@ -2,62 +2,63 @@ from collections import namedtuple
 
 # allow_pred : True if predicate clause is allowed for this instruction 
 # reg_store  : True if the instruction stores its result in the first register
-Grammar = namedtuple('Grammar', ['type', 'code', 'rule', 'allow_pred', 'reg_store']) 
+Grammar = namedtuple('Grammar', ['type', 'code', 'rule', 'allow_pred', 'reg_store', 'integer_inst','float_inst', 'is_64']) 
+Grammar.__new__.__defaults__ = (None, None, None, False, False, False, False, False)
 
 #Taken from MaxAs
 SASS_GRAMMARS = {    
     #Floating Point Instructions
-    'FADD'     : Grammar('x32', 0x5c58000000000000, allow_pred = True, reg_store = True, rule = r"^$FADD'f'z$rnd'sa' $r0, $r8, $fcr20"),
-    'FADD32I'  : Grammar('x32', 0x0800000000000000, allow_pred = True, reg_store = True, rule = r"^$FADD32I'f'z $r0, $r8, $f20w32"),
-    'FCHK'     : Grammar('x32', 0x5c88000000000000, allow_pred = True, reg_store = False, rule = r"^$FCHK\.DIVIDE $p0, $r8, $r20"), #Partial?
-    'FCMP'     : Grammar('cmp', 0x5ba0000000000000, allow_pred = True, reg_store = True, rule = r"^$FCMP$fcmp'f'z $r0, $r8, $fcr20, $r39"),
-    'FFMA'     : Grammar('x32', 0x5980000000000000, allow_pred = True, reg_store = True, rule = [r"^$FFMA'f'z$rnd'sa' $r0, $r8, $fcr20, $r39",r"^$FFMA'f'z$rnd'sa' $r0, $r8, $r39s20, $c20s39"]),
-    'FMNMX'    : Grammar('shft',0x5c60000000000000, allow_pred = True, reg_store = True, rule = r"^$FMNMX'f'z $r0, $r8, $fcr20, $p39"),
-    'FMUL'     : Grammar('x32', 0x5c68000000000000, allow_pred = True, reg_store = True, rule = r"^$FMUL'f'z$rnd'sa' $r0, $r8, $fcr20"),
-    'FMUL32I'  : Grammar('x32', 0x1e00000000000000, allow_pred = True, reg_store = True, rule = r"^$FMUL32I'f'z $r0, $r8, $f20w32"),
-    'FSET'     : Grammar('shft',0x5800000000000000, allow_pred = True, reg_store = True, rule = r"^$FSET$fcmp'f'z$bool $r0, $r8, $fcr20, $p39"),
-    'FSETP'    : Grammar('cmp', 0x5bb0000000000000, allow_pred = True, reg_store = False, rule = r"^$FSETP$fcmp'f'z$bool $p3, $p0, $r8, $fcr20, $p39"),
-    'MUFU'     : Grammar('qtr', 0x5080000000000000, allow_pred = True, reg_store = True, rule = r"^$MUFU$func $r0, $r8"),
-    'RRO'      : Grammar('rro', 0x5c90000000000000, allow_pred = True, reg_store = True, rule = r"^$RRO$rro $r0, $r20"),
-    'DADD'     : Grammar('x64', 0x5c70000000000000, allow_pred = True, reg_store = True, rule = r"^$DADD$rnd $r0, $r8, $dr20"),
-    'DFMA'     : Grammar('x64', 0x5b70000000000000, allow_pred = True, reg_store = True, rule = r"^$DFMA$rnd $r0, $r8, $dr20, $r39"),
-    'DMNMX'    : Grammar('cmp', 0x5c50000000000000, allow_pred = True, reg_store = True, rule = r"^$DMNMX $r0, $r8, $dr20, $p39"),
-    'DMUL'     : Grammar('x64', 0x5c80000000000000, allow_pred = True, reg_store = True, rule = r"^$DMUL$rnd $r0, $r8, $dr20"),
-    'DSET'     : Grammar('cmp', 0x5900000000000000, allow_pred = True, reg_store = True, rule = r"^$DSET$fcmp$bool $r0, $r8, $dr20, $p39"),
-    'DSETP'    : Grammar('cmp', 0x5b80000000000000, allow_pred = True, reg_store = False, rule = r"^$DSETP$fcmp$bool $p3, $p0, $r8, $dr20, $p39"),
-    'FSWZADD'  : Grammar('x32', 0x0000000000000000, allow_pred = True, reg_store = True, rule = r"^$FSWZADD[^]*"), #TODO
+    'FADD'     : Grammar('x32', 0x5c58000000000000, allow_pred = True, reg_store = True, float_inst = True, rule = r"^$FADD'f'z$rnd'sa' $r0, $r8, $fcr20"),
+    'FADD32I'  : Grammar('x32', 0x0800000000000000, allow_pred = True, reg_store = True, float_inst = True, rule = r"^$FADD32I'f'z $r0, $r8, $f20w32"),
+    'FCHK'     : Grammar('x32', 0x5c88000000000000, allow_pred = True, reg_store = False, float_inst = True, rule = r"^$FCHK\.DIVIDE $p0, $r8, $r20"), #Partial?
+    'FCMP'     : Grammar('cmp', 0x5ba0000000000000, allow_pred = True, reg_store = True, float_inst = True, rule = r"^$FCMP$fcmp'f'z $r0, $r8, $fcr20, $r39"),
+    'FFMA'     : Grammar('x32', 0x5980000000000000, allow_pred = True, reg_store = True, float_inst = True, rule = [r"^$FFMA'f'z$rnd'sa' $r0, $r8, $fcr20, $r39",r"^$FFMA'f'z$rnd'sa' $r0, $r8, $r39s20, $c20s39"]),
+    'FMNMX'    : Grammar('shft',0x5c60000000000000, allow_pred = True, reg_store = True, float_inst = True, rule = r"^$FMNMX'f'z $r0, $r8, $fcr20, $p39"),
+    'FMUL'     : Grammar('x32', 0x5c68000000000000, allow_pred = True, reg_store = True, float_inst = True, rule = r"^$FMUL'f'z$rnd'sa' $r0, $r8, $fcr20"),
+    'FMUL32I'  : Grammar('x32', 0x1e00000000000000, allow_pred = True, reg_store = True, float_inst = True, rule = r"^$FMUL32I'f'z $r0, $r8, $f20w32"),
+    'FSET'     : Grammar('shft',0x5800000000000000, allow_pred = True, reg_store = True, float_inst = True, rule = r"^$FSET$fcmp'f'z$bool $r0, $r8, $fcr20, $p39"),
+    'FSETP'    : Grammar('cmp', 0x5bb0000000000000, allow_pred = True, reg_store = False, float_inst = True, rule = r"^$FSETP$fcmp'f'z$bool $p3, $p0, $r8, $fcr20, $p39"),
+    'MUFU'     : Grammar('qtr', 0x5080000000000000, allow_pred = True, reg_store = True, float_inst = True, rule = r"^$MUFU$func $r0, $r8"),
+    'RRO'      : Grammar('rro', 0x5c90000000000000, allow_pred = True, reg_store = True, float_inst = True, rule = r"^$RRO$rro $r0, $r20"),
+    'DADD'     : Grammar('x64', 0x5c70000000000000, allow_pred = True, reg_store = True, float_inst = True, is_64 = True, rule = r"^$DADD$rnd $r0, $r8, $dr20"),
+    'DFMA'     : Grammar('x64', 0x5b70000000000000, allow_pred = True, reg_store = True, float_inst = True, is_64 = True, rule = r"^$DFMA$rnd $r0, $r8, $dr20, $r39"),
+    'DMNMX'    : Grammar('cmp', 0x5c50000000000000, allow_pred = True, reg_store = True, float_inst = True, is_64 = True, rule = r"^$DMNMX $r0, $r8, $dr20, $p39"),
+    'DMUL'     : Grammar('x64', 0x5c80000000000000, allow_pred = True, reg_store = True, float_inst = True, is_64 = True, rule = r"^$DMUL$rnd $r0, $r8, $dr20"),
+    'DSET'     : Grammar('cmp', 0x5900000000000000, allow_pred = True, reg_store = True, float_inst = True, is_64 = True, rule = r"^$DSET$fcmp$bool $r0, $r8, $dr20, $p39"),
+    'DSETP'    : Grammar('cmp', 0x5b80000000000000, allow_pred = True, reg_store = False, float_inst = True, is_64 = True, rule = r"^$DSETP$fcmp$bool $p3, $p0, $r8, $dr20, $p39"),
+    'FSWZADD'  : Grammar('x32', 0x0000000000000000, allow_pred = True, reg_store = True, float_inst = True, rule = r"^$FSWZADD[^]*"), #TODO
     'HADD2'     : Grammar('x32', 0x5d10000000000000, allow_pred = True, reg_store = True, rule = r"^$HADD2'f'z $r0, $r8, $r20"),
     'HMUL2'     : Grammar('x32', 0x5d08000000000000, allow_pred = True, reg_store = True, rule = r"^$HMUL2'f'z $r0, $r8, $r20"),
     'HFMA2'     : Grammar('x32', 0x5d00000000000000, allow_pred = True, reg_store = True, rule = r"^$HFMA2'f'z $r0, $r8, $r20, $r39"),
     'HSETP2'    : Grammar('cmp', 0x5d20000000000000, allow_pred = True, reg_store = False, rule = r"^$HSETP2$fcmp$bool $p3, $p0, $r8, $fcr20, $p39"), #Partial
 
     #Integer Instructions
-    'BFE'       : Grammar('shft', 0x5c01000000000000, allow_pred = True, reg_store = True, rule = r"^$BFE$u32 $r0, $r8, $icr20"),
-    'BFI'       : Grammar('shft', 0x5bf0000000000000, allow_pred = True, reg_store = True, rule = r"^$BFI $r0, $r8, $ir20, $cr39"),
-    'FLO'       : Grammar('s2r',  0x5c30000000000000, allow_pred = True, reg_store = True, rule = r"^$FLO\.U32 $r0, $icr20"),
-    'IADD'      : Grammar('x32',  0x5c10000000000000, allow_pred = True, reg_store = True, rule = r"^$IADD'sa'$X $r0cc, $r8, $icr20"),
-    'IADD32I'   : Grammar('x32',  0x1c00000000000000, allow_pred = True, reg_store = True, rule = r"^$IADD32I$X $r0cc, $r8, $i20w32"),
-    'IADD3'     : Grammar('x32',  0x5cc0000000000000, allow_pred = True, reg_store = True, rule = r"^$IADD3$add3 $r0cc, $r8, $icr20, $r39"),
-    'ICMP'      : Grammar('cmp',  0x5b41000000000000, allow_pred = True, reg_store = True, rule = r"^$ICMP$icmp$u32 $r0, $r8, $icr20, $r39"),
-    'IMNMX'     : Grammar('shft', 0x5c21000000000000, allow_pred = True, reg_store = True, rule = r"^$IMNMX$u32$hilo $r0cc, $r8, $icr20, $p39"),
-    'ISET'      : Grammar('shft', 0x5b51000000000000, allow_pred = True, reg_store = True, rule = r"^$ISET$icmp$u32$X$bool $r0, $r8, $icr20, $p39"),
-    'ISETP'     : Grammar('cmp',  0x5b61000000000000, allow_pred = True, reg_store = False, rule = r"^$ISETP$icmp$u32$X$bool $p3, $p0, $r8, $icr20, $p39"),
-    'ISCADD'    : Grammar('shft', 0x5c18000000000000, allow_pred = True, reg_store = True, rule = r"^$ISCADD $r0, $r8, $icr20, $i39w8"),
-    'ISCADD32I' : Grammar('shft', 0x1400000000000000, allow_pred = True, reg_store = True, rule = r"^$ISCADD32I $r0, $r8, $i20w32, $i53w5"),
+    'BFE'       : Grammar('shft', 0x5c01000000000000, allow_pred = True, reg_store = True, integer_inst = True, rule = r"^$BFE$u32 $r0, $r8, $icr20"),
+    'BFI'       : Grammar('shft', 0x5bf0000000000000, allow_pred = True, reg_store = True, integer_inst = True, rule = r"^$BFI $r0, $r8, $ir20, $cr39"),
+    'FLO'       : Grammar('s2r',  0x5c30000000000000, allow_pred = True, reg_store = True, integer_inst = True, rule = r"^$FLO\.U32 $r0, $icr20"),
+    'IADD'      : Grammar('x32',  0x5c10000000000000, allow_pred = True, reg_store = True, integer_inst = True, rule = r"^$IADD'sa'$X $r0cc, $r8, $icr20"),
+    'IADD32I'   : Grammar('x32',  0x1c00000000000000, allow_pred = True, reg_store = True, integer_inst = True, rule = r"^$IADD32I$X $r0cc, $r8, $i20w32"),
+    'IADD3'     : Grammar('x32',  0x5cc0000000000000, allow_pred = True, reg_store = True, integer_inst = True, rule = r"^$IADD3$add3 $r0cc, $r8, $icr20, $r39"),
+    'ICMP'      : Grammar('cmp',  0x5b41000000000000, allow_pred = True, reg_store = True, integer_inst = True, rule = r"^$ICMP$icmp$u32 $r0, $r8, $icr20, $r39"),
+    'IMNMX'     : Grammar('shft', 0x5c21000000000000, allow_pred = True, reg_store = True, integer_inst = True, rule = r"^$IMNMX$u32$hilo $r0cc, $r8, $icr20, $p39"),
+    'ISET'      : Grammar('shft', 0x5b51000000000000, allow_pred = True, reg_store = True, integer_inst = True, rule = r"^$ISET$icmp$u32$X$bool $r0, $r8, $icr20, $p39"),
+    'ISETP'     : Grammar('cmp',  0x5b61000000000000, allow_pred = True, reg_store = False, integer_inst = True, rule = r"^$ISETP$icmp$u32$X$bool $p3, $p0, $r8, $icr20, $p39"),
+    'ISCADD'    : Grammar('shft', 0x5c18000000000000, allow_pred = True, reg_store = True, integer_inst = True, rule = r"^$ISCADD $r0, $r8, $icr20, $i39w8"),
+    'ISCADD32I' : Grammar('shft', 0x1400000000000000, allow_pred = True, reg_store = True, integer_inst = True, rule = r"^$ISCADD32I $r0, $r8, $i20w32, $i53w5"),
 # TODO
 #    'LEA'       : Grammar('cmp',  0x5bd0000000000000, allow_pred = True, reg_store = False, rule = r"^$LEA $p48, $r0cc, $r8, $icr20"),
 #                   Grammar('shft', 0x5bd7000000000000, allow_pred = True, reg_store = True, rule = r"^$LEA $r0cc, $r8, $icr20, $i39w8"),
 #                   Grammar('shft', 0x5bdf004000000000, allow_pred = True, reg_store = True, rule = r"^$LEA\.HI$X $r0cc, $r8, $r20, $r39, $i28w8"),
 #                   Grammar('shft', 0x0a07000000000000, allow_pred = True, reg_store = True, rule = r"^$LEA\.HI$X $r0cc, $r8, $c20, $r39, $i51w5"),
 #                 ],
-    'LOP'       : Grammar('x32',  0x5c40000000000000, allow_pred = True, reg_store = True, rule = r"^$LOP$bool$lopz $r0, $r8, (?<INV>~)?$icr20(?<INV>\.INV)?"),
-    'LOP32I'    : Grammar('x32',  0x0400000000000000, allow_pred = True, reg_store = True, rule = r"^$LOP32I$bool $r0, $r8, $i20w32"),
-    'LOP3'      : Grammar('x32',  0x5be7000000000000, allow_pred = True, reg_store = True, rule = [r"^$LOP3\.LUT $r0, $r8, $r20, $r39, $i28w8",r"^$LOP3\.LUT $r0, $r8, $i20, $r39, $i48w8"]),
-    'POPC'      : Grammar('s2r',  0x5c08000000000000, allow_pred = True, reg_store = True, rule = r"^$POPC $r0, $r20"),
-    'SHF'       : Grammar('shft', 0x5bf8000000000000, allow_pred = True, reg_store = True, rule = [ r"^$SHF\.L$shf $r0, $r8, $ir20, $r39", r"^$SHF\.R$shf $r0, $r8, $ir20, $r39",]),
-    'SHL'       : Grammar('shft', 0x5c48000000000000, allow_pred = True, reg_store = True, rule = r"^$SHL(?<W>\.W)? $r0, $r8, $icr20"),
-    'SHR'       : Grammar('shft', 0x5c29000000000000, allow_pred = True, reg_store = True, rule = r"^$SHR$u32 $r0, $r8, $icr20"),
-    'XMAD'      : Grammar('x32',  0x5b00000000000000, allow_pred = True, reg_store = True, rule = [ r"^$XMAD$xmad $r0cc, $r8, $ir20, $r39", r"^$XMAD$xmad $r0cc, $r8, $r39s20, $c20s39", r"^$XMAD$xmadc $r0cc, $r8, $c20x, $r39"] ),
+    'LOP'       : Grammar('x32',  0x5c40000000000000, allow_pred = True, reg_store = False, integer_inst = True, rule = r"^$LOP$bool$lopz $r0, $r8, (?<INV>~)?$icr20(?<INV>\.INV)?"),
+    'LOP32I'    : Grammar('x32',  0x0400000000000000, allow_pred = True, reg_store = False, integer_inst = True, rule = r"^$LOP32I$bool $r0, $r8, $i20w32"),
+    'LOP3'      : Grammar('x32',  0x5be7000000000000, allow_pred = True, reg_store = False, integer_inst = True, rule = [r"^$LOP3\.LUT $r0, $r8, $r20, $r39, $i28w8",r"^$LOP3\.LUT $r0, $r8, $i20, $r39, $i48w8"]),
+    'POPC'      : Grammar('s2r',  0x5c08000000000000, allow_pred = True, reg_store = True, integer_inst = True, rule = r"^$POPC $r0, $r20"),
+    'SHF'       : Grammar('shft', 0x5bf8000000000000, allow_pred = True, reg_store = True, integer_inst = True, rule = [ r"^$SHF\.L$shf $r0, $r8, $ir20, $r39", r"^$SHF\.R$shf $r0, $r8, $ir20, $r39",]),
+    'SHL'       : Grammar('shft', 0x5c48000000000000, allow_pred = True, reg_store = True, integer_inst = True, rule = r"^$SHL(?<W>\.W)? $r0, $r8, $icr20"),
+    'SHR'       : Grammar('shft', 0x5c29000000000000, allow_pred = True, reg_store = True, integer_inst = True, rule = r"^$SHR$u32 $r0, $r8, $icr20"),
+    'XMAD'      : Grammar('x32',  0x5b00000000000000, allow_pred = True, reg_store = True, integer_inst = True, rule = [ r"^$XMAD$xmad $r0cc, $r8, $ir20, $r39", r"^$XMAD$xmad $r0cc, $r8, $r39s20, $c20s39", r"^$XMAD$xmadc $r0cc, $r8, $c20x, $r39"] ),
     # XMAD replaces these
     'IMAD'      : Grammar('x32',  0x0000000000000000, allow_pred = True, reg_store = True, rule = r"^$IMAD[^]*"), #TODO
     'IMADSP'    : Grammar('x32',  0x0000000000000000, allow_pred = True, reg_store = True, rule = r"^$IMADSP[^]*"), #TODO
