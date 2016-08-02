@@ -4,11 +4,6 @@ from pprint import pprint
 from pycuasm.compiler.hir import *
 from pycuasm.compiler.analysis import collect_64bit_registers
 
-
-# Register R0 and R1 are reserved for register spilling to shared memory
-SPILL_REGISTER_ADDR = Register('R0')
-SPILL_REGISTER = Register('R1')
-
 #TODO: Bug
 def relocate_registers(program):
     reg64_dict = collect_64bit_registers(program)
@@ -132,7 +127,13 @@ def rename_register(program, old_reg, new_reg):
     rename_registers(program, {old_reg.name:new_reg.name})
     
 
-def spill_register_to_shared(program, spilled_register, cfg, thread_block_size=256):
+def spill_register_to_shared(
+        program, 
+        target_register, 
+        cfg=None,
+        spill_register=Register('R0'), 
+        spill_register_addr=Register('R1'), 
+        thread_block_size=256, ):
     """ Spill registers to shared memory 
         
         Args:
@@ -142,7 +143,7 @@ def spill_register_to_shared(program, spilled_register, cfg, thread_block_size=2
             thread_block_size (int): Size of thread block  
     """
     # TODO: Find free barrier for LDS Instruction
-    print("Replacing %s with shared memory (TB:%d)" % (spilled_register, thread_block_size))
+    print("Replacing %s with shared memory (TB:%d)" % (target_register, thread_block_size))
     
     tid_reg = None
     tid_inst = 0    
@@ -172,7 +173,7 @@ def spill_register_to_shared(program, spilled_register, cfg, thread_block_size=2
         # Compute base address for spilled register
         base_addr_inst = Instruction(Flags(hex(wait_flag),'-','-','-','d'), 
             Opcode('SHL'), 
-            operands=[SPILL_REGISTER_ADDR, tid_reg, 0x02])
+            operands=[spill_register_addr, tid_reg, 0x02])
         program.ast.insert(program.ast.index(tid_inst) + 1, base_addr_inst)
     
     # Assign the spilled register Identifier
@@ -182,13 +183,14 @@ def spill_register_to_shared(program, spilled_register, cfg, thread_block_size=2
         
     load_shr_inst = Instruction(Flags('--','1','2','-','d'), 
                         Opcode('LDS'),
-                        operands=[SPILL_REGISTER, Pointer(SPILL_REGISTER_ADDR, spill_offset),
+                        operands=[spill_register, Pointer(spill_register_addr, spill_offset),
                             #Register(spilled_register.name + 'S')
                         ])
     
-    store_shr_inst = Instruction(Flags('--','-','-','-','d'), 
+    # Add read barrier to make sure that the STS instruction is completed before next instreuction
+    store_shr_inst = Instruction(Flags('--','4','-','-','d'), 
                         Opcode('STS'),
-                        operands=[Pointer(SPILL_REGISTER_ADDR, spill_offset), SPILL_REGISTER, 
+                        operands=[Pointer(spill_register_addr, spill_offset), spill_register, 
                             #Register(spilled_register.name + 'S')
                         ])
     
@@ -199,44 +201,44 @@ def spill_register_to_shared(program, spilled_register, cfg, thread_block_size=2
         if not isinstance(inst, Instruction):
             continue
         
-        # If instruction contain spilled_register, rename the spilled_register to SPILL_REGISTER.
+        # If instruction contain spilled_register, rename the spilled_register to spill_register.
         # If the instruction read data from the spilled_register, load data in the shared memory 
-        # to SPILL_REGISTER just before the instruction. 
-        # If the instruction write data to the spilled_register, store data from SPILL_REGISTER 
+        # to spill_register just before the instruction. 
+        # If the instruction write data to the spilled_register, store data from spill_register 
         # to shared memory right after the instruction.
         for op in inst.operands:
             if isinstance(op, Pointer):
-                if spilled_register == op.register:
+                if target_register == op.register:
                     r_count = r_count + 1
                     # Load data from shared memory
-                    op.register.rename(SPILL_REGISTER)
+                    op.register.rename(spill_register)
                     # Set the instruction that read still register to wait for shared memory read 
                     inst.flags.wait_barrier = inst.flags.wait_barrier | 0x3 
                     program.ast.insert(program.ast.index(inst), copy.deepcopy(load_shr_inst))
                     
             elif isinstance(op, Register):
-                if spilled_register == op:
+                if target_register == op:
                     r_count = r_count + 1
                     # Read access
-                    inst.operands[inst.operands.index(op)].rename(SPILL_REGISTER)
+                    inst.operands[inst.operands.index(op)].rename(spill_register)
                     # Set the instruction that read spill register to wait for shared memory read
                     inst.flags.wait_barrier = inst.flags.wait_barrier | 0x3
                     program.ast.insert(program.ast.index(inst), copy.deepcopy(load_shr_inst))
         
         if isinstance(inst.dest, Pointer):
-            if spilled_register == inst.dest.register:
+            if target_register == inst.dest.register:
                 # Read access
                 w_count = w_count + 1
-                inst.dest.register.rename(SPILL_REGISTER)
+                inst.dest.register.rename(spill_register)
                 # Set the instruction that read spill register to wait for shared memory read
                 inst.flags.wait_barrier = inst.flags.wait_barrier | 0x3
                 program.ast.insert(program.ast.index(inst), copy.deepcopy(load_shr_inst))
         elif isinstance(inst.dest, Register):
-            if spilled_register == inst.dest:
+            if target_register == inst.dest:
                 # Write access
                 w_count = w_count + 1
                 st_inst = copy.deepcopy(store_shr_inst)
-                inst.dest.rename(SPILL_REGISTER)
+                inst.dest.rename(spill_register)
                 
                 # Set wait flag if the previous instruction sets write dependence flag. 
                 # This will happen if the instruction store data in the spilled register.
@@ -251,6 +253,9 @@ def spill_register_to_shared(program, spilled_register, cfg, thread_block_size=2
                         st_inst.flags.wait_barrier = st_inst.flags.wait_barrier |( 1 << (inst.flags.write_barrier-1))
                     inst.flags.stall = 13 
                 program.ast.insert(program.ast.index(inst) + 1, st_inst)
+                # Set wait flag of the next instruction to wait for store instruction to finish
+                inst_next = program.ast[program.ast.index(st_inst) + 1] 
+                inst_next.flags.wait_barrier = inst_next.flags.wait_barrier | 8 
                   
     print("Read accesses: %d Write accesses: %d" % (r_count, w_count))   
     program.update()

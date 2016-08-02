@@ -11,8 +11,6 @@ def collect_64bit_registers(program):
     # Detecting 64-bit accesses
     for inst in [x for x in program.ast if isinstance(x, Instruction)]:
         if inst.opcode.type == 'x32' and inst.opcode.integer_inst and inst.opcode.reg_store:
-            if inst.dest.name == 'R14':
-                pprint(inst)
             if inst.dest.carry_bit:
                 opcode = inst.opcode
                 inst_pos = program.ast.index(inst)
@@ -21,7 +19,6 @@ def collect_64bit_registers(program):
                     if next_inst.opcode.use_carry_bit:
                         reg64.add((inst.dest.name, next_inst.dest.name))
                         break
-                
     return reg64
     
 def collect_global_memory_access(program):
