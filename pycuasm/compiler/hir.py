@@ -60,8 +60,8 @@ class Instruction(object):
         self.addr = 0        
         self.dest = None
         
-        if opcode.reg_store:
-            self.dest = operands[0]
+        if opcode.reg_store and isinstance(operands[0], Register):
+            self.dest = operands[0] 
             self.operands = operands[1:]
         
     def __str__(self):
