@@ -51,26 +51,54 @@ def compile(args):
     cfg = Cfg(program)
     cfg.create_dot_graph("cfg.dot")
     
-    cfd_register_sweep(program, size=2)
+    #cfd_register_sweep(program, size=2)
     
+    reg_list = [
+        'R14', 
+        'R15', 
+        'R22', 
+        'R23', 
+        'R29', 
+        'R32', 
+        'R33', 
+        'R34', 
+        'R35', 
+        'R36', 
+        'R38', 
+        #'R47', 
+        'R56', 
+        'R60', 
+        'R63', 
+        #'R66', 
+        #'R67'
+        ]
+    
+    reg_64 = collect_64bit_registers(program)
+        
+    for reg in reg_list:
+        spill_register_to_shared(
+            program, 
+            Register(reg), 
+            spill_register = Register('R68'),
+            spill_register_addr = Register('R69'),
+            thread_block_size=192)
+
+    relocate_registers(program)
+
+    program_regs = sorted(program.registers, key=lambda x: int(x.replace('R','')))
+
     '''
     spill_register_to_shared(
         program, 
-        Register('R33'), 
-        spill_register = Register('R68'),
-        spill_register_addr = Register('R69'),
-        thread_block_size=192)
-        
-    spill_register_to_shared(
-        program, 
-        Register('R34'), 
+        Register('R65'), 
         spill_register = Register('R68'),
         spill_register_addr = Register('R69'),
         thread_block_size=192)
     '''
     
     program.save('out.sass')
-
+    
+    
 def test_lexer(sass):
     sass_lexer.input(sass.sass_raw)
     while True:

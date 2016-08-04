@@ -1,90 +1,72 @@
 import copy
+import itertools
 
 from pprint import pprint
 from pycuasm.compiler.hir import *
-from pycuasm.compiler.analysis import collect_64bit_registers
+from pycuasm.compiler.analysis import *
 
-#TODO: Bug
 def relocate_registers(program):
-    reg64_dict = collect_64bit_registers(program)
-    registers_dict = {}
-    register_counter = 0
-
-    # Reassign registers        
-    for inst in program.ast:
-        if not isinstance(inst, Instruction):
-            continue
-        for op in inst.operands:
-            reg = None
-            if isinstance(op, Pointer):
-                reg = op.register
-            elif isinstance(op, Register) and not op.is_special:
-                reg = op
-            else:
-                continue
-                
-            if reg.name not in registers_dict:
-                # Check if reg is 64-bit reg
-                if reg.name in reg64_dict:
-                    # 64-bit reg
-                    reg_id = int(reg.name.replace('R',''))
-                    couple_reg_name = reg64_dict[reg.name]
-                    couple_reg_id = int(couple_reg_name.replace('R',''))
-                    
-                    if couple_reg_id > reg_id:
-                        pprint((reg.name, "R%d" % register_counter))
-                        registers_dict[reg.name] = "R%d" % register_counter
-                        register_counter = register_counter + 1
-                        pprint((couple_reg_name, "R%d" % register_counter))
-                        registers_dict[couple_reg_name] = "R%d" % register_counter
-                        register_counter = register_counter + 1
-                    else:
-                        pprint((couple_reg_name, "R%d" % register_counter))
-                        registers_dict[couple_reg_name] = "R%d" % register_counter
-                        register_counter = register_counter + 1
-                        pprint((reg.name, "R%d" % register_counter))
-                        registers_dict[reg.name] = "R%d" % register_counter
-                        register_counter = register_counter + 1     
-                else:
-                    pprint((reg.name, "R%d" % register_counter))
-                    registers_dict[reg.name] = "R%d" % register_counter
-                    register_counter = register_counter + 1
-                
-        if isinstance(inst.dest, Pointer):
-            reg = inst.dest.register
-        elif isinstance(inst.dest, Register):
-            reg = inst.dest
-        else:
-            continue
-            
-        if reg.name not in registers_dict:
-                # Check if reg is 64-bit reg
-                if reg.name in reg64_dict:
-                    # 64-bit reg
-                    reg_id = int(reg.name.replace('R',''))
-                    couple_reg_name = reg64_dict[reg.name]
-                    couple_reg_id = int(couple_reg_name.replace('R',''))
-                    
-                    if couple_reg_id > reg_id:
-                        pprint((reg.name, "R%d" % register_counter))
-                        registers_dict[reg.name] = "R%d" % register_counter
-                        register_counter = register_counter + 1
-                        pprint((couple_reg_name, "R%d" % register_counter))
-                        registers_dict[couple_reg_name] = "R%d" % register_counter
-                        register_counter = register_counter + 1
-                    else:
-                        pprint((couple_reg_name, "R%d" % register_counter))
-                        registers_dict[couple_reg_name] = "R%d" % register_counter
-                        register_counter = register_counter + 1
-                        pprint((reg.name, "R%d" % register_counter))
-                        registers_dict[reg.name] = "R%d" % register_counter
-                        register_counter = register_counter + 1     
-                else:
-                    pprint((reg.name, "R%d" % register_counter))
-                    registers_dict[reg.name] = "R%d" % register_counter
-                    register_counter = register_counter + 1
+    program_regs = sorted(program.registers, key=lambda x: int(x.replace('R','')))
+    pprint(program_regs)
     
-    rename_registers(program, registers_dict)
+    reg_mem =  collect_global_memory_access(program)
+    reg_64 = collect_64bit_registers(program)    
+    reg_64 = list(itertools.chain(*reg_64.intersection(reg_mem)))
+        
+    idx = 0;
+    end = False
+    reg_skip = []
+    while not end:
+        reg_cur = program_regs[idx]
+        reg_cur_id = int(reg_cur.replace('R',''))
+        reg_next = program_regs[idx+1]
+        reg_next_id = int(reg_next.replace('R',''))
+        
+        if reg_cur_id + 1 == reg_next_id:
+            idx = idx + 1
+        elif reg_next not in reg_64:
+            if len(reg_skip) != 0:
+                reg_next_new = reg_skip.pop()
+                reg_next_new_id = int(reg_next_new.replace('R',''))
+                rename_register(program, Register(reg_next), Register(reg_next_new))
+                program_regs[reg_next_new_id] = reg_next_new
+                program_regs[idx+1] = reg_cur
+                idx = idx + 1
+            else:
+                reg_next_new_id = reg_cur_id + 1
+                reg_next_new = 'R%d' % reg_next_new_id        
+                rename_register(program, Register(reg_next), Register(reg_next_new))
+                program_regs[idx+1] = reg_next_new
+                idx = idx + 1
+        else:
+            # reg_next is a 64-bit register
+            reg_next_new_id = reg_cur_id + 1
+            reg_next_new = 'R%d' % reg_next_new_id
+            if reg_next_new_id % 2 == 0:
+                # The available register is an even register. 
+                # The 64-bit register can be move without any problem
+                # Move both 64-bit registers together
+                rename_register(program, Register(reg_next), Register(reg_next_new))
+                rename_register(program, Register(program_regs[idx+2]), Register('R%d' % (reg_next_new_id+1)))
+                program_regs[idx+1] = reg_next_new
+                program_regs[idx+2] = 'R%d' % (reg_next_new_id+1)
+                idx = idx + 2
+            else:
+                # The available register is an odd register.
+                # The 64-bit register cannot be start with an odd register. 
+                # Stores the odd register in reg_skip list and move to the next register
+                reg_skip.append(reg_next_new)
+                if reg_next_new_id != reg_next_id:
+                    rename_register(program, Register(reg_next), Register('R%d' % (reg_next_new_id+1)))
+                    rename_register(program, Register(program_regs[idx+2]), Register('R%d' % (reg_next_new_id+2)))
+                    program_regs[idx+1] = 'R%d' % (reg_next_new_id+1)
+                    program_regs[idx+2] = 'R%d' % (reg_next_new_id+2)
+                    idx = idx + 2
+                else:
+                    idx = idx + 2
+
+        if idx == len(program_regs)-1:
+            end = True
     
 def rename_registers(program, registers_dict):
     """ Renaming registers in a program using rules in registers_dict 
@@ -93,8 +75,8 @@ def rename_registers(program, registers_dict):
             program (Program): Target program for register renaming
             registers_dict (dict{str:str}): A dictionary containing a renaming rules. The key represent the old register name and a value contain new register name 
     """
-    print("Renaming using dict:" )
-    pprint(registers_dict)
+    #print("Renaming using dict:" )
+    #pprint(registers_dict)
     for inst in program.ast:
         if not isinstance(inst, Instruction):
             continue
@@ -126,7 +108,6 @@ def rename_register(program, old_reg, new_reg):
     print("Renaming %s to %s" % (old_reg, new_reg))
     rename_registers(program, {old_reg.name:new_reg.name})
     
-
 def spill_register_to_shared(
         program, 
         target_register, 
@@ -259,4 +240,3 @@ def spill_register_to_shared(
                   
     print("Read accesses: %d Write accesses: %d" % (r_count, w_count))   
     program.update()
-        

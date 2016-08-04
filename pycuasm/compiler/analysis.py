@@ -10,7 +10,10 @@ def collect_64bit_registers(program):
     
     # Detecting 64-bit accesses
     for inst in [x for x in program.ast if isinstance(x, Instruction)]:
-        if inst.opcode.type == 'x32' and inst.opcode.integer_inst and inst.opcode.reg_store:
+        if (inst.opcode.type == 'x32' and 
+            inst.opcode.integer_inst and 
+            inst.opcode.reg_store and 
+            inst.dest):
             if inst.dest.carry_bit:
                 opcode = inst.opcode
                 inst_pos = program.ast.index(inst)
