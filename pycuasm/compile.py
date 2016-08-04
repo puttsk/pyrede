@@ -53,6 +53,34 @@ def compile(args):
     
     #cfd_register_sweep(program, size=2)
     
+    reg_candidates = generate_spill_candidates(program, exclude_registers=['R0','R1'])
+    interference_dict = analyse_register_interference(program, reg_candidates)
+    access_dict = analyse_register_accesses(program, reg_candidates)
+    pprint(reg_candidates)
+
+    spilled_count = 0
+    spilled_target = 14
+
+    while spilled_count < spilled_target:
+        spilled_reg = reg_candidates.pop(0)
+        spill_register_to_shared(
+            program, 
+            Register(spilled_reg), 
+            spill_register = Register('R68'),
+            spill_register_addr = Register('R69'),
+            thread_block_size=192)
+        
+        for interference_reg in interference_dict[spilled_reg]:
+            if interference_reg in reg_candidates:
+                print("Remove: ", interference_reg)
+                reg_candidates.remove(interference_reg)
+        
+        reg_candidates = sorted(reg_candidates, key=lambda x: access_dict[x]['read'] +  access_dict[x]['write'])
+        spilled_count = spilled_count + 1
+
+    relocate_registers(program)
+    
+    '''
     reg_list = [
         'R14', 
         'R15', 
@@ -86,7 +114,7 @@ def compile(args):
     relocate_registers(program)
 
     program_regs = sorted(program.registers, key=lambda x: int(x.replace('R','')))
-
+    '''
     '''
     spill_register_to_shared(
         program, 

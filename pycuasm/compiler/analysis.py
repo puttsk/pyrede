@@ -1,5 +1,75 @@
+import itertools
+
 from pprint import pprint
 from pycuasm.compiler.hir import *
+
+def analyse_register_interference(program, register_list = None):
+    if not register_list:
+        register_list = sorted([ x for x in program.registers], key=lambda x: int(x.replace('R','')))
+
+    interference_dict = dict.fromkeys(register_list, [])
+
+    for inst in [x for x in program.ast if isinstance(x, Instruction)]:
+        interference_regs = [reg.name for reg in inst.operands if isinstance(reg, Register) and reg.name in register_list]
+        interference_ptrs = [reg.register.name for reg in inst.operands if isinstance(reg, Pointer) and reg.register.name in register_list]
+        interference_regs = interference_regs + interference_ptrs
+        if len(interference_regs) > 1:
+            for reg in interference_regs:   
+                interference_dict[reg] = interference_dict[reg] + interference_regs
+
+    interference_dict = {k: sorted(set(v)) for k, v in interference_dict.items()}
+    for reg in interference_dict:
+        if reg in interference_dict[reg]:
+            interference_dict[reg].remove(reg)
+
+    return interference_dict
+
+def analyse_register_accesses(program, register_list = None):
+    if not register_list:
+        register_list = sorted([ x for x in program.registers], key=lambda x: int(x.replace('R','')))
+
+    access_dict = dict.fromkeys(register_list)
+    for reg in access_dict:
+        access_dict[reg] = {'read':0, 'write':0}
+    
+    for inst in [x for x in program.ast if isinstance(x, Instruction)]:        
+        for op in inst.operands:
+            if isinstance(op, Pointer):
+                if op.register.name in access_dict:
+                    # Read access
+                    access_dict[op.register.name]['read'] = access_dict[op.register.name]['read'] + 1
+            elif isinstance(op, Register):
+                if op.name in access_dict:
+                    # Read access
+                    access_dict[op.name]['read'] = access_dict[op.name]['read'] + 1
+        if isinstance(inst.dest, Pointer):
+            if inst.dest.register.name in access_dict:
+                # Read access
+                access_dict[inst.dest.register.name]['read'] = access_dict[inst.dest.register.name]['read'] + 1
+        elif isinstance(inst.dest, Register):
+            if inst.dest.name in access_dict:
+                # Write access
+                access_dict[inst.dest.name]['write'] = access_dict[inst.dest.name]['write'] + 1 
+    
+    return access_dict
+    
+def generate_spill_candidates(program, exclude_registers=[]):
+    reg_64 = collect_64bit_registers(program)
+    reg_mem =  collect_global_memory_access(program)
+    
+    reg_remove = list(itertools.chain(*reg_64.intersection(reg_mem))) + exclude_registers
+    reg_candidates = sorted([ x for x in program.registers if x not in reg_remove], key=lambda x: int(x.replace('R','')))
+
+    interference_dict = analyse_register_interference(program, reg_candidates)
+    access_dict = analyse_register_accesses(program, reg_candidates)
+    
+    pprint(interference_dict)
+    pprint(access_dict)
+
+    reg_candidates = sorted(reg_candidates, key=lambda x: access_dict[x]['read'] +  access_dict[x]['write'])
+    #reg_candidates = sorted(reg_candidates, key=lambda x: len(interference_dict[x]))
+
+    return reg_candidates
 
 def collect_64bit_registers(program):
     reg64_dict = {}
