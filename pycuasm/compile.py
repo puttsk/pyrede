@@ -48,41 +48,46 @@ def compile(args):
     program.constants = sass.constants
     program.header = sass.header
     
-    program.save('out.sass')
-    return
-
     print("Register usage: %s" % program.registers)
-    cfg = Cfg(program)
-    cfg.create_dot_graph("cfg.dot")
+    #cfg = Cfg(program)
+    #cfg.create_dot_graph("cfg.dot")
     
     #cfd_register_sweep(program, size=2)
     
-    reg_candidates = generate_spill_candidates(program, exclude_registers=['R0','R1'])
-    interference_dict = analyse_register_interference(program, reg_candidates)
-    access_dict = analyse_register_accesses(program, reg_candidates)
-    pprint(reg_candidates)
+    if args.spill_register:
+        print("[RES_SPILL] Spilling %d registers to shared memory." % args.spill_register)
+        reg_candidates = generate_spill_candidates(program, exclude_registers=['R0','R1'])
+        interference_dict = analyse_register_interference(program, reg_candidates)
+        access_dict = analyse_register_accesses(program, reg_candidates)
+        pprint(reg_candidates)
 
-    spilled_count = 0
-    spilled_target = 14
+        last_reg = sorted(program.registers, key=lambda x: int(x.replace('R','')), reverse=True)[0]
+        last_reg_id = int(last_reg.replace('R',''))
 
-    while spilled_count < spilled_target:
-        spilled_reg = reg_candidates.pop(0)
-        spill_register_to_shared(
-            program, 
-            Register(spilled_reg), 
-            spill_register = Register('R68'),
-            spill_register_addr = Register('R69'),
-            thread_block_size=192)
-        
-        for interference_reg in interference_dict[spilled_reg]:
-            if interference_reg in reg_candidates:
-                print("Remove: ", interference_reg)
-                reg_candidates.remove(interference_reg)
-        
-        reg_candidates = sorted(reg_candidates, key=lambda x: access_dict[x]['read'] +  access_dict[x]['write'])
-        spilled_count = spilled_count + 1
+        spilled_count = 0
+        spilled_target = args.spill_register
 
-    relocate_registers(program)
+        while spilled_count < spilled_target:
+            spilled_reg = reg_candidates.pop(0)
+            spill_register_to_shared(
+                program, 
+                Register(spilled_reg), 
+                spill_register = Register('R%d' % (last_reg_id+1)),
+                spill_register_addr = Register('R%d' % (last_reg_id+2)),
+                thread_block_size=192)
+            
+            for interference_reg in interference_dict[spilled_reg]:
+                if interference_reg in reg_candidates:
+                    print("Remove: ", interference_reg)
+                    reg_candidates.remove(interference_reg)
+            
+            reg_candidates = sorted(reg_candidates, key=lambda x: access_dict[x]['read'] +  access_dict[x]['write'])
+            spilled_count = spilled_count + 1
+
+        relocate_registers(program)
+
+    program.save('out.sass')
+    return
     
 def test_lexer(sass):
     sass_lexer.input(sass.sass_raw)
