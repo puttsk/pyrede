@@ -65,12 +65,16 @@ class Instruction(object):
             self.operands = operands[1:]
         
     def __str__(self):
-        return "%s %s\t%s%s%s;" % (self.flags, 
-                                    self.condition if self.condition else "", 
-                                    self.opcode,
-                                    (" " + str(self.dest) + ',') if self.dest else "",
-                                    (" " + ", ".join([str(x) for x in self.operands])) if self.operands else ""
-                                    )
+        if self.opcode.name != "DEPBAR":
+            return "%s %s\t%s%s%s;" % (self.flags, 
+                                       self.condition if self.condition else "", 
+                                       self.opcode,
+                                       (" " + str(self.dest) + ',') if self.dest else "",
+                                       (" " + ", ".join([str(x) for x in self.operands])) if self.operands else ""
+                                       )
+        else:
+            return "%s\t%s {%s};" % (self.flags, self.opcode, 
+                                     (",".join([str(x) for x in self.operands[0][1] if x != '{' and x != '}'])))
 
     def __repr__(self):
         return "%4x: %s" % (self.addr, self.__str__())
@@ -201,11 +205,12 @@ class Predicate(object):
         return self.__str__()
 
 class Identifier(object):
-    def __init__(self, name):
+    def __init__(self, name, is_negative = False):
         self.name = name
+        self.is_negative = is_negative
 
     def __str__(self):
-        return self.name
+        return "%s%s" % ('-' if self.is_negative else '', self.name)
     
     def __repr__(self):
         return self.__str__()
@@ -231,7 +236,7 @@ class Register(object):
         return hash(self.name)
 
     def __str__(self):
-        return "%s%s%s%s%s%s" % ('|' if self.is_absolute else '','-' if self.is_negative else '',self.name, '.' if self.extension else '', '.'.join(self.extension), '|' if self.is_absolute else '')
+        return "%s%s%s%s%s%s" % ('|' if self.is_absolute else '','-' if self.is_negative else '',self.name,'|' if self.is_absolute else '', '.' if self.extension else '', '.'.join(self.extension) )
     
     def __repr__(self):
         return self.full   
@@ -248,12 +253,13 @@ class Register(object):
             self.name = new_name
     
 class Constant(object):
-    def __init__(self, name, is_param = False):
+    def __init__(self, name, is_param = False, is_negative = False):
         self.name = name
         self.is_param = is_param
+        self.is_negative = is_negative
 
     def __str__(self):
-        return self.name
+        return "%s%s" % ( '-' if self.is_negative else '' ,self.name)
     
     def __repr__(self):
         return self.__str__()

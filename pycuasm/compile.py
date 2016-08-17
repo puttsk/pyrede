@@ -20,6 +20,7 @@ from pycuasm.tool import *
 class Sass():
     def __init__(self, sass_file):
         self.header = []
+        print('Opening ' +  sass_file)
         with open(sass_file) as sass_file:
             for line in sass_file:
                 if line[0] == '#':
@@ -47,6 +48,9 @@ def compile(args):
     program.constants = sass.constants
     program.header = sass.header
     
+    program.save('out.sass')
+    return
+
     print("Register usage: %s" % program.registers)
     cfg = Cfg(program)
     cfg.create_dot_graph("cfg.dot")
@@ -79,53 +83,6 @@ def compile(args):
         spilled_count = spilled_count + 1
 
     relocate_registers(program)
-    
-    '''
-    reg_list = [
-        'R14', 
-        'R15', 
-        'R22', 
-        'R23', 
-        'R29', 
-        'R32', 
-        'R33', 
-        'R34', 
-        'R35', 
-        'R36', 
-        'R38', 
-        #'R47', 
-        'R56', 
-        'R60', 
-        'R63', 
-        #'R66', 
-        #'R67'
-        ]
-    
-    reg_64 = collect_64bit_registers(program)
-        
-    for reg in reg_list:
-        spill_register_to_shared(
-            program, 
-            Register(reg), 
-            spill_register = Register('R68'),
-            spill_register_addr = Register('R69'),
-            thread_block_size=192)
-
-    relocate_registers(program)
-
-    program_regs = sorted(program.registers, key=lambda x: int(x.replace('R','')))
-    '''
-    '''
-    spill_register_to_shared(
-        program, 
-        Register('R65'), 
-        spill_register = Register('R68'),
-        spill_register_addr = Register('R69'),
-        thread_block_size=192)
-    '''
-    
-    program.save('out.sass')
-    
     
 def test_lexer(sass):
     sass_lexer.input(sass.sass_raw)

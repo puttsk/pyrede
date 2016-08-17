@@ -99,11 +99,15 @@ def p_integter_list(p):
 def p_identifier(p):
     '''identifier : ID
                   | '+' ID
+                  | '-' ID
     '''
     if len(p) == 2:
         p[0] = Identifier(p[1])
     else:
-        p[0] = Identifier(p[2])
+        if p[1] == '-':
+            p[0] = Identifier(p[2], is_negative=True)
+        else:
+            p[0] = Identifier(p[2])
         
 def p_predicate(p):
     '''predicate : PREDICATE
@@ -116,13 +120,21 @@ def p_predicate(p):
 
 def p_constant(p):
     '''constant : CONSTANT
+                | '-' CONSTANT
     '''
-    p[0] = Constant(p[1])
+    if len(p) == 2:
+        p[0] = Constant(p[1])
+    else:
+        p[0] = Constant(p[2], is_negative=True)
     
 def p_parameter(p):
     '''parameter : PARAMETER
+                 | '-' PARAMETER
     '''
-    p[0] = Constant(p[1], is_param = True)
+    if len(p) == 2:
+        p[0] = Constant(p[1], is_param = True)
+    else:
+        p[0] = Constant(p[2], is_param = True, is_negative=True)
 
 def p_special_register(p):
     '''special_register : SPECIAL_REGISTER
@@ -140,6 +152,7 @@ def p_register(p):
                 | '|' REGISTER '|'
                 | '+' REGISTER
                 | '-' REGISTER  
+                | '|' REGISTER '|' EXTENSION
     '''
     if len(p) == 2:
         p[0] = Register(p[1])
@@ -147,7 +160,10 @@ def p_register(p):
         if p[1] == '-':
             p[0] = Register(p[2], is_negative = True)
         elif p[1] == '|' and p[3] == '|':
-            p[0] = Register(p[2], is_absolute = True)
+            if len(p) == 5:
+                p[0] = Register(p[2]+p[4], is_absolute = True)
+            else: 
+                p[0] = Register(p[2], is_absolute = True)
         elif p[1] == '+':
             p[0] = Register(p[2])
         else:
@@ -171,6 +187,7 @@ def p_immediate(p):
 
 def p_immediate_int(p):
     '''immediate_int : INTEGER
+                     | INTEGER_NEG
     '''
     p[0] = int(p[1])
  

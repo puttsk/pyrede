@@ -16,10 +16,12 @@ tokens = [
    'ID',
    'HEXADECIMAL',
    'INTEGER',
+   'INTEGER_NEG',
    'FLOAT',
    'PREDICATE',
    'REGISTER',
    'SPECIAL_REGISTER',
-   'PARAMETER'
+   'PARAMETER',
+   'EXTENSION'
 ] + list(reserved.values())
 

@@ -33,9 +33,13 @@ def t_SPECIAL_REGISTER(t):
 def t_REGISTER(t):
     r'R\d+(\.\w+)?(\.\w+)?'
     return t
+    
+def t_EXTENSION(t):
+    r'\.\w+'
+    return t
 
 def t_PREDICATE(t):
-    r'P\d+'
+    r'P[\d+|T]'
     return t
 
 def t_FLOAT(t):
@@ -43,6 +47,11 @@ def t_FLOAT(t):
     t.value = float(t.value)    
     return t
 
+def t_INTEGER_NEG(t):
+    r'[-]?\d+(\.NEG)'
+    t.value = -int(t.value.replace('.NEG',''))    
+    return t
+    
 def t_INTEGER(t):
     r'[-]?\d+'
     t.value = int(t.value)    
