@@ -7,7 +7,7 @@ from pycuasm.compiler.analysis import *
 
 def relocate_registers(program):
     program_regs = sorted(program.registers, key=lambda x: int(x.replace('R','')))
-    pprint(program_regs)
+    #pprint(program_regs)
     
     reg_mem =  collect_global_memory_access(program)
     reg_64 = collect_64bit_registers(program)    
@@ -162,14 +162,14 @@ def spill_register_to_shared(
     spill_offset = spill_reg_id * thread_block_size * 4
     program.shared_spill_count += 1
         
-    load_shr_inst = Instruction(Flags('--','1','2','-','d'), 
+    load_shr_inst = SpillLoadInstruction(Flags('--','1','2','-','d'), 
                         Opcode('LDS'),
                         operands=[spill_register, Pointer(spill_register_addr, spill_offset),
                             #Register(spilled_register.name + 'S')
                         ])
     
     # Add read barrier to make sure that the STS instruction is completed before next instreuction
-    store_shr_inst = Instruction(Flags('--','4','-','-','d'), 
+    store_shr_inst = SpillStoreInstruction(Flags('--','4','-','-','d'), 
                         Opcode('STS'),
                         operands=[Pointer(spill_register_addr, spill_offset), spill_register, 
                             #Register(spilled_register.name + 'S')
@@ -178,9 +178,9 @@ def spill_register_to_shared(
     w_count = 0
     r_count = 0
     
-    for inst in program.ast:
-        if not isinstance(inst, Instruction):
-            continue
+    for inst in [x for x in program.ast if isinstance(x, Instruction)]:
+        #if not isinstance(inst, Instruction):
+        #    continue
         
         # If instruction contain spilled_register, rename the spilled_register to spill_register.
         # If the instruction read data from the spilled_register, load data in the shared memory 
@@ -236,7 +236,8 @@ def spill_register_to_shared(
                 program.ast.insert(program.ast.index(inst) + 1, st_inst)
                 # Set wait flag of the next instruction to wait for store instruction to finish
                 inst_next = program.ast[program.ast.index(st_inst) + 1] 
-                inst_next.flags.wait_barrier = inst_next.flags.wait_barrier | 8 
+                if isinstance(inst_next, Instruction):
+                    inst_next.flags.wait_barrier = inst_next.flags.wait_barrier | 8 
                   
     print("Read accesses: %d Write accesses: %d" % (r_count, w_count))   
     program.update()

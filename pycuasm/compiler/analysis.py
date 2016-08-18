@@ -63,8 +63,8 @@ def generate_spill_candidates(program, exclude_registers=[]):
     interference_dict = analyse_register_interference(program, reg_candidates)
     access_dict = analyse_register_accesses(program, reg_candidates)
     
-    pprint(interference_dict)
-    pprint(access_dict)
+    #pprint(interference_dict)
+    #pprint(access_dict)
 
     reg_candidates = sorted(reg_candidates, key=lambda x: access_dict[x]['read'] +  access_dict[x]['write'])
     #reg_candidates = sorted(reg_candidates, key=lambda x: len(interference_dict[x]))

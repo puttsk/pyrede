@@ -48,14 +48,14 @@ def compile(args):
     program.constants = sass.constants
     program.header = sass.header
     
-    print("Register usage: %s" % program.registers)
+    print("Register usage: %s" % sorted(program.registers, key=lambda x: int(x.replace('R',''))))
     #cfg = Cfg(program)
     #cfg.create_dot_graph("cfg.dot")
     
     #cfd_register_sweep(program, size=2)
     
     if args.spill_register:
-        print("[RES_SPILL] Spilling %d registers to shared memory." % args.spill_register)
+        print("[RES_SPILL] Spilling %d registers to shared memory. Threadblock Size: %d" % (args.spill_register, args.thread_block_size))
         reg_candidates = generate_spill_candidates(program, exclude_registers=['R0','R1'])
         interference_dict = analyse_register_interference(program, reg_candidates)
         access_dict = analyse_register_accesses(program, reg_candidates)
@@ -74,7 +74,7 @@ def compile(args):
                 Register(spilled_reg), 
                 spill_register = Register('R%d' % (last_reg_id+1)),
                 spill_register_addr = Register('R%d' % (last_reg_id+2)),
-                thread_block_size=192)
+                thread_block_size=args.thread_block_size)
             
             for interference_reg in interference_dict[spilled_reg]:
                 if interference_reg in reg_candidates:
@@ -85,8 +85,21 @@ def compile(args):
             spilled_count = spilled_count + 1
 
         relocate_registers(program)
-
+    '''
+    last_reg = sorted(program.registers, key=lambda x: int(x.replace('R','')), reverse=True)[0]
+    last_reg_id = int(last_reg.replace('R',''))
+    
+    spill_register_to_shared(
+            program, 
+            Register('R11'), 
+            spill_register = Register('R%d' % (last_reg_id+1)),
+            spill_register_addr = Register('R%d' % (last_reg_id+2)),
+            thread_block_size=args.thread_block_size)
+    '''
+    
     program.save('out.sass')
+    
+    #myocyte_register_sweep(program, size=2)
     return
     
 def test_lexer(sass):

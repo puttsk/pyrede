@@ -13,6 +13,7 @@ def main():
     parser.add_argument('-k','--kernel', help="Specify kernel name for extract operation.")
     parser.add_argument('-o','--output', help="Specify output assembly file name.")
     parser.add_argument('-r','--spill-register', help="Spill a specific number of registers to shared memory", type=int)
+    parser.add_argument('-t','--thread-block-size', help="Number of threads in thread block", type=int, default=256)
     parser.add_argument('--cuobjdump', help="Specify an input cuobjdump file. For debugging purpose only when cuobjdume does not exist in the system.")
     parser.add_argument('input_file', type=str)
     args = parser.parse_args()

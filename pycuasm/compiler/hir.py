@@ -83,6 +83,12 @@ class Instruction(object):
     def reg_store(self):
         return self.opcode.reg_store
 
+class SpillLoadInstruction(Instruction):
+    pass
+    
+class SpillStoreInstruction(Instruction):
+    pass
+
 class Flags(object):
     def __init__(self, wait_barrier, read_barrier, write_barrier, yield_hint, stall):
         
