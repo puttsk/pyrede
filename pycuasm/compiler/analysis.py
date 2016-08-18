@@ -92,6 +92,14 @@ def collect_64bit_registers(program):
                     if next_inst.opcode.use_carry_bit:
                         reg64.add((inst.dest.name, next_inst.dest.name))
                         break
+        
+        if (inst.opcode.type == 'x64'):
+            for reg in [x for x in inst.operands if isinstance(x, Register)]:
+                reg_id = int(reg.name.replace('R',''))
+                reg64.add(("R%d" % reg_id, "R%d" % (reg_id+1)))
+            if inst.reg_store:
+                reg_id = int(inst.dest.name.replace('R',''))
+                reg64.add(("R%d" % reg_id, "R%d" % (reg_id+1)))
     return reg64
     
 def collect_global_memory_access(program):

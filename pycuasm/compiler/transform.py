@@ -179,9 +179,6 @@ def spill_register_to_shared(
     r_count = 0
     
     for inst in [x for x in program.ast if isinstance(x, Instruction)]:
-        #if not isinstance(inst, Instruction):
-        #    continue
-        
         # If instruction contain spilled_register, rename the spilled_register to spill_register.
         # If the instruction read data from the spilled_register, load data in the shared memory 
         # to spill_register just before the instruction. 
@@ -209,7 +206,7 @@ def spill_register_to_shared(
         if isinstance(inst.dest, Pointer):
             if target_register == inst.dest.register:
                 # Read access
-                w_count = w_count + 1
+                r_count = r_count + 1
                 inst.dest.register.rename(spill_register)
                 # Set the instruction that read spill register to wait for shared memory read
                 inst.flags.wait_barrier = inst.flags.wait_barrier | 0x3
