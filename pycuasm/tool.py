@@ -25,10 +25,11 @@ def myocyte_register_sweep(program, size=1, output_file='result.csv'):
     #rename_register(program, Register('R1'), Register('R%d' % (last_reg_id+2)))
 
     reg_64 = collect_64bit_registers(program)
-    reg_mem =  collect_global_memory_access(program)
+    #reg_mem =  collect_global_memory_access(program)
+    reg_mem = []
     
     reg_remove = list(itertools.chain(*reg_64.intersection(reg_mem)))
-    reg_candidates = sorted([ x for x in program.registers if x not in reg_remove], key=lambda x: int(x.replace('R','')))
+    reg_candidates = generate_spill_candidates(program, exclude_registers=['R0','R1'])
 
     '''
     for inst in [x for x in program.ast if isinstance(x, Instruction)]:
@@ -105,7 +106,7 @@ def myocyte_register_sweep(program, size=1, output_file='result.csv'):
             else:
                 resule_file.write('%s,' % rename_dict.get(r, 'N'))
         try:
-            result = subprocess.check_output(['nvprof', './myocyte.out', '100', '1', '0'], stderr=subprocess.STDOUT, universal_newlines=True)
+            result = subprocess.check_output(['nvprof', './myocyte.out', '100', '10', '1'], stderr=subprocess.STDOUT, universal_newlines=True)
             match = re.search(r"(?P<time>\d+\.\d+)ms.*kernel", result)
             
             resule_file.write(match.group('time'))

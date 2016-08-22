@@ -80,9 +80,14 @@ def p_operand(p):
                | parameter
                | constant
                | '{' integer_list '}'
+               | register immediate
     '''
+    # TODO: Currently, instruction like BRX R4-0x0c is match to 'register immediate', which isn't correct
     if len(p) == 2:
         p[0] = p[1]
+    elif len(p) == 3:
+        p[1].add_offset(p[2])
+        p[0] = p[1] 
     else:
         p[0] = p[1:len(p)]
 
@@ -104,10 +109,7 @@ def p_identifier(p):
     if len(p) == 2:
         p[0] = Identifier(p[1])
     else:
-        if p[1] == '-':
-            p[0] = Identifier(p[2], is_negative=True)
-        else:
-            p[0] = Identifier(p[2])
+        p[0] = Identifier(p[2], sign=p[1])
         
 def p_predicate(p):
     '''predicate : PREDICATE
@@ -121,11 +123,16 @@ def p_predicate(p):
 def p_constant(p):
     '''constant : CONSTANT
                 | '-' CONSTANT
+                | ID '[' immediate_hex ']' pointer
     '''
+    # TODO: SASS allows indirect access to constant memory e.g. c[0x00][R4]
+    #       Need to have a better parser for this.
     if len(p) == 2:
         p[0] = Constant(p[1])
-    else:
+    elif len(p) == 3:
         p[0] = Constant(p[2], is_negative=True)
+    else:
+        p[0] = Constant(p[1] + p[2] + str(p[3]) + p[4] + str(p[5]))
     
 def p_parameter(p):
     '''parameter : PARAMETER
@@ -189,24 +196,17 @@ def p_immediate_int(p):
     '''immediate_int : INTEGER
                      | INTEGER_NEG
     '''
-    p[0] = int(p[1])
+    p[0] = p[1]
  
 def p_immediate_float(p):
     '''immediate_float : FLOAT
     '''
-    p[0] = float(p[1])
+    p[0] = p[1]
 
 def p_immediate_hex(p):
     '''immediate_hex : HEXADECIMAL
     '''
-    hex = p[1].split('.')
-    if len(hex) == 2:
-        if hex[1] == 'NEG':
-            p[0] = -int(hex[0], 16)
-        else:
-            p[0] = int(hex[0], 16)
-    else:
-        p[0] = int(p[1], 16) 
+    p[0] = p[1]
 
 def p_error(p):
     print("Syntax error at line " + str(p.lineno))

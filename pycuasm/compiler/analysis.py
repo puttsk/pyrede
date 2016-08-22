@@ -55,7 +55,8 @@ def analyse_register_accesses(program, register_list = None):
     
 def generate_spill_candidates(program, exclude_registers=[]):
     reg_64 = collect_64bit_registers(program)
-    reg_mem =  collect_global_memory_access(program)
+    #reg_mem =  collect_global_memory_access(program)
+    reg_mem = []
     
     reg_remove = list(itertools.chain(*reg_64.union(reg_mem))) + exclude_registers
     reg_candidates = sorted([ x for x in program.registers if x not in reg_remove], key=lambda x: int(x.replace('R','')))

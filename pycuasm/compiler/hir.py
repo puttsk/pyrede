@@ -1,6 +1,8 @@
 import json
 import copy
 
+from pprint import pprint
+
 from enum import Enum
 from pycuasm.compiler.grammar import SASS_GRAMMARS
 
@@ -42,7 +44,7 @@ class Program(object):
         f.writelines(self.header)
         
         f.write("\n<CONSTANT_MAPPING>\n")
-        for const in self.constants:
+        for const in sorted(self.constants.keys()):
             f.write("\t%s : %s\n" % (const, self.constants[const])) 
         f.write("</CONSTANT_MAPPING>\n\n")
         
@@ -130,7 +132,7 @@ class Opcode(object):
         self.use_carry_bit = 'X' in self.extension
         
         if self.name not in SASS_GRAMMARS:
-            raise ValueError("Invalid instruction: " + name)
+            raise ValueError("Invalid instruction: " + opcode)
 
         self.grammar = SASS_GRAMMARS[self.name]
 
@@ -211,12 +213,12 @@ class Predicate(object):
         return self.__str__()
 
 class Identifier(object):
-    def __init__(self, name, is_negative = False):
+    def __init__(self, name, sign = None):
         self.name = name
-        self.is_negative = is_negative
+        self.sign = sign
 
     def __str__(self):
-        return "%s%s" % ('-' if self.is_negative else '', self.name)
+        return "%s%s%s" % (self.sign if self.sign else '', self.name, ' ' if self.name == 'INF' else '')
     
     def __repr__(self):
         return self.__str__()
@@ -233,6 +235,7 @@ class Register(object):
         self.is_absolute = is_absolute
         
         self.carry_bit = 'CC' in self.extension
+        self.offset = 0
 
     @property
     def full(self):
@@ -242,7 +245,13 @@ class Register(object):
         return hash(self.name)
 
     def __str__(self):
-        return "%s%s%s%s%s%s" % ('|' if self.is_absolute else '','-' if self.is_negative else '',self.name,'|' if self.is_absolute else '', '.' if self.extension else '', '.'.join(self.extension) )
+        return "%s%s%s%s%s%s%s" % ('|' if self.is_absolute else '',
+                                   '-' if self.is_negative else '',
+                                   self.name,
+                                   '|' if self.is_absolute else '', 
+                                   '.' if self.extension else '', 
+                                   '.'.join(self.extension),
+                                   '' if self.offset == 0 else ' ' + str(self.offset) )
     
     def __repr__(self):
         return self.full   
@@ -257,6 +266,9 @@ class Register(object):
             self.name = new_name.name
         elif isinstance(name, str):
             self.name = new_name
+    
+    def add_offset(self, offset):
+        self.offset = offset
     
 class Constant(object):
     def __init__(self, name, is_param = False, is_negative = False):

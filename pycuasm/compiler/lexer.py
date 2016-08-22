@@ -44,17 +44,17 @@ def t_PREDICATE(t):
 
 def t_FLOAT(t):
     r'[-]?\d+\.\d+(e[\+-]\d+)?'
-    t.value = float(t.value)    
+    #t.value = float(t.value)    
     return t
 
 def t_INTEGER_NEG(t):
     r'[-]?\d+(\.NEG)'
-    t.value = -int(t.value.replace('.NEG',''))    
+    #t.value = -int(t.value.replace('.NEG',''))    
     return t
     
 def t_INTEGER(t):
     r'[-]?\d+'
-    t.value = int(t.value)    
+    #t.value = int(t.value)    
     return t
 
 def t_ID(t):

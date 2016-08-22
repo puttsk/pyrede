@@ -9,9 +9,10 @@ def relocate_registers(program):
     program_regs = sorted(program.registers, key=lambda x: int(x.replace('R','')))
     #pprint(program_regs)
     
-    reg_mem =  collect_global_memory_access(program)
+    #reg_mem =  collect_global_memory_access(program)
+    reg_mem = []
     reg_64 = collect_64bit_registers(program)    
-    reg_64 = list(itertools.chain(*reg_64.intersection(reg_mem)))
+    reg_64 = list(itertools.chain(*reg_64.union(reg_mem)))
         
     idx = 0;
     end = False
@@ -226,7 +227,6 @@ def spill_register_to_shared(
                     inst.flags.stall = inst.flags.stall + 1    
                 else:
                     if(inst.opcode.grammar.type == 'gmem' or inst.opcode.grammar.type == 'smem'):
-                        pprint(inst)
                         inst.flags.write_barrier = 6
                         st_inst.flags.wait_barrier = st_inst.flags.wait_barrier |( 1 << (inst.flags.write_barrier-1))
                     inst.flags.stall = 13 

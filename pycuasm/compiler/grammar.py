@@ -46,7 +46,7 @@ SASS_GRAMMARS = {
     'ISCADD'    : Grammar('shft', 0x5c18000000000000, allow_pred = True, reg_store = True, integer_inst = True, rule = r"^$ISCADD $r0, $r8, $icr20, $i39w8"),
     'ISCADD32I' : Grammar('shft', 0x1400000000000000, allow_pred = True, reg_store = True, integer_inst = True, rule = r"^$ISCADD32I $r0, $r8, $i20w32, $i53w5"),
 # TODO
-#    'LEA'       : Grammar('cmp',  0x5bd0000000000000, allow_pred = True, reg_store = False, rule = r"^$LEA $p48, $r0cc, $r8, $icr20"),
+    'LEA'       : Grammar('cmp',  0x5bd0000000000000, allow_pred = True, reg_store = False, rule = r"^$LEA $p48, $r0cc, $r8, $icr20"),
 #                   Grammar('shft', 0x5bd7000000000000, allow_pred = True, reg_store = True, rule = r"^$LEA $r0cc, $r8, $icr20, $i39w8"),
 #                   Grammar('shft', 0x5bdf004000000000, allow_pred = True, reg_store = True, rule = r"^$LEA\.HI$X $r0cc, $r8, $r20, $r39, $i28w8"),
 #                   Grammar('shft', 0x0a07000000000000, allow_pred = True, reg_store = True, rule = r"^$LEA\.HI$X $r0cc, $r8, $c20, $r39, $i51w5"),

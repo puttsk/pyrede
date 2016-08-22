@@ -67,7 +67,7 @@ def compile(args):
         spilled_count = 0
         spilled_target = args.spill_register
 
-        while spilled_count < spilled_target:
+        while len(reg_candidates) > 0 and spilled_count < spilled_target:
             spilled_reg = reg_candidates.pop(0)
             spill_register_to_shared(
                 program, 
@@ -96,10 +96,10 @@ def compile(args):
             spill_register_addr = Register('R%d' % (last_reg_id+2)),
             thread_block_size=args.thread_block_size)
     '''
-    
+    #pprint(generate_spill_candidates(program, exclude_registers=['R0','R1']))
     program.save('out.sass')
     
-    #myocyte_register_sweep(program, size=2)
+    #myocyte_register_sweep(program, size=1)
     return
     
 def test_lexer(sass):
