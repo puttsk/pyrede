@@ -179,11 +179,19 @@ def p_register(p):
 def p_pointer(p):
     '''pointer      : '[' register ']'
                     | '[' register '+' immediate ']'
+                    | immediate_pointer
     '''
     if len(p) == 4:
         p[0] = Pointer(p[2])
+    elif len(p) == 2:
+        p[0] = p[1]
     else:
         p[0] = Pointer(p[2], p[4])
+
+def p_immediate_pointer(p):
+    '''immediate_pointer    : '[' immediate ']'
+    '''
+    p[0] = Pointer(None, p[2])
 
 def p_immediate(p):
     '''immediate    : immediate_int

@@ -1,5 +1,6 @@
 import json
 import copy
+import re
 
 from pprint import pprint
 
@@ -11,8 +12,18 @@ class Program(object):
         self.ast = ast
         self.constants = None
         self.header = None
-        
+        self.shared_size = 0
         self.update()
+        
+    def set_constants(self, constants):
+        self.constants = constants
+    
+    def set_header(self, header):
+        self.header = header
+        for param in self.header:
+            if "SharedSize" in param:
+                match = re.search("(?P<size>\d+)", param)
+                self.shared_size = int(match.group('size'))
     
     def update(self):
         #Update AST and build register table
@@ -195,8 +206,11 @@ class Pointer(object):
         self.is_64bit = is_64bit
         
     def __str__(self):
-        return "[%s%s]" % (self.register, 
+        if self.register:
+            return "[%s%s]" % (self.register, 
                             ("+" + str(self.offset)) if self.offset != 0 else "")
+        else:
+            return "[%s]" % (self.offset)
 
     def __repr__(self):
         return self.__str__()        

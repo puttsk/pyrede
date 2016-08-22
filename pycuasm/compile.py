@@ -45,8 +45,8 @@ class Sass():
 def compile(args):
     sass = Sass(args.input_file)
     program = sass_parser.parse(sass.sass_raw, lexer=sass_lexer)
-    program.constants = sass.constants
-    program.header = sass.header
+    program.set_constants(sass.constants)
+    program.set_header(sass.header)
     
     print("Register usage: %s" % sorted(program.registers, key=lambda x: int(x.replace('R',''))))
     #cfg = Cfg(program)

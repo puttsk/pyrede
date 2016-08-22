@@ -47,6 +47,11 @@ def t_FLOAT(t):
     #t.value = float(t.value)    
     return t
 
+def t_TEX2D(t):
+    r'2D'
+    t.type = 'ID'
+    return t
+
 def t_INTEGER_NEG(t):
     r'[-]?\d+(\.NEG)'
     #t.value = -int(t.value.replace('.NEG',''))    
