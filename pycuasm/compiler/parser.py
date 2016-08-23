@@ -191,7 +191,7 @@ def p_pointer(p):
 def p_immediate_pointer(p):
     '''immediate_pointer    : '[' immediate ']'
     '''
-    p[0] = Pointer(None, p[2])
+    p[0] = StaticPointer(p[2])
 
 def p_immediate(p):
     '''immediate    : immediate_int

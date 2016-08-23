@@ -24,6 +24,7 @@ class Program(object):
             if "SharedSize" in param:
                 match = re.search("(?P<size>\d+)", param)
                 self.shared_size = int(match.group('size'))
+        print("shared_size:" +  str(self.shared_size));
     
     def update(self):
         #Update AST and build register table
@@ -206,14 +207,23 @@ class Pointer(object):
         self.is_64bit = is_64bit
         
     def __str__(self):
-        if self.register:
-            return "[%s%s]" % (self.register, 
-                            ("+" + str(self.offset)) if self.offset != 0 else "")
-        else:
-            return "[%s]" % (self.offset)
+        return "[%s%s]" % (self.register, 
+                        ("+" + str(self.offset)) if self.offset != 0 else "")
+
 
     def __repr__(self):
         return self.__str__()        
+        
+class StaticPointer(object):
+    def __init__(self, offset=0, is_64bit=False):
+        self.offset = offset
+        self.is_64bit = is_64bit
+        
+    def __str__(self):
+        return "[%s]" % (self.offset)
+
+    def __repr__(self):
+        return self.__str__()      
 
 class Predicate(object):
     def __init__(self, name, is_inverse=False):

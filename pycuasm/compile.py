@@ -97,7 +97,7 @@ def compile(args):
             thread_block_size=args.thread_block_size)
     '''
     #pprint(generate_spill_candidates(program, exclude_registers=['R0','R1']))
-    program.save('out.sass')
+    program.save(args.output)
     
     #myocyte_register_sweep(program, size=1)
     return

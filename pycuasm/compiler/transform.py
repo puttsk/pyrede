@@ -160,7 +160,7 @@ def spill_register_to_shared(
     
     # Assign the spilled register Identifier
     spill_reg_id = program.shared_spill_count
-    spill_offset = spill_reg_id * thread_block_size * 4
+    spill_offset = spill_reg_id * thread_block_size * 4 + program.shared_size
     program.shared_spill_count += 1
         
     load_shr_inst = SpillLoadInstruction(Flags('--','1','2','-','d'), 
