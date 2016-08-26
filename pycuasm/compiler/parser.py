@@ -137,11 +137,15 @@ def p_constant(p):
 def p_parameter(p):
     '''parameter : PARAMETER
                  | '-' PARAMETER
+                 | '~' PARAMETER
     '''
     if len(p) == 2:
         p[0] = Constant(p[1], is_param = True)
     else:
-        p[0] = Constant(p[2], is_param = True, is_negative=True)
+        if p[1] == '-':
+            p[0] = Constant(p[2], is_param = True, is_negative=True)
+        else:
+            p[0] = Constant(p[2], is_param = True, sign=p[1])
 
 def p_special_register(p):
     '''special_register : SPECIAL_REGISTER

@@ -2,7 +2,7 @@ import ply.lex as lex
 
 from pycuasm.compiler.settings import tokens, reserved
 
-literals = [',', ';','[',']', '{', '}', '@', '!', ':', '+', '-', '|']
+literals = [',', ';','[',']', '{', '}', '@', '!', ':', '+', '-', '|', '~']
 
 flag = r'[0-9,a-f,A-F,-]'
 

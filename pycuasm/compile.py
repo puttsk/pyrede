@@ -55,7 +55,7 @@ def compile(args):
     #cfd_register_sweep(program, size=2)
     
     if args.spill_register:
-        print("[RES_SPILL] Spilling %d registers to shared memory. Threadblock Size: %d" % (args.spill_register, args.thread_block_size))
+        print("[REG_SPILL] Spilling %d registers to shared memory. Threadblock Size: %d" % (args.spill_register, args.thread_block_size))
         reg_candidates = generate_spill_candidates(program, exclude_registers=['R0','R1'])
         interference_dict = analyse_register_interference(program, reg_candidates)
         access_dict = analyse_register_accesses(program, reg_candidates)
@@ -83,15 +83,17 @@ def compile(args):
             
             reg_candidates = sorted(reg_candidates, key=lambda x: access_dict[x]['read'] +  access_dict[x]['write'])
             spilled_count = spilled_count + 1
-
+            
+    if not args.no_register_relocation:
         relocate_registers(program)
+    
     '''
     last_reg = sorted(program.registers, key=lambda x: int(x.replace('R','')), reverse=True)[0]
     last_reg_id = int(last_reg.replace('R',''))
     
     spill_register_to_shared(
             program, 
-            Register('R11'), 
+            Register('R34'), 
             spill_register = Register('R%d' % (last_reg_id+1)),
             spill_register_addr = Register('R%d' % (last_reg_id+2)),
             thread_block_size=args.thread_block_size)

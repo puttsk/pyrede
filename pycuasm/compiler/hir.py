@@ -42,6 +42,15 @@ class Program(object):
                     addr += 8
                 
                 regs = [x for x in inst.operands + [inst.dest] if isinstance(x, Register) and not x.is_special]
+                
+                if inst.opcode.name == 'LDG' and inst.opcode.op_bit > 32:
+                    reg_count = int(inst.opcode.op_bit / 32)
+                    reg = inst.dest
+                    reg_id = int(reg.name.replace('R',''))
+                    
+                    for i in range(1, reg_count):
+                        regs.append(Register('R%d' % (reg_id + i))) 
+                
                 registers += sorted([x.name for x in regs if x.name not in registers])
                 
             elif isinstance(inst, Label):
@@ -142,11 +151,16 @@ class Opcode(object):
         self.name = name[0]
         self.extension = name[1:]        
         self.use_carry_bit = 'X' in self.extension
+        self.op_bit = 32
+        
+        for ext in self.extension:
+            if ext.isdigit():
+                self.op_bit = int(ext)
         
         if self.name not in SASS_GRAMMARS:
             raise ValueError("Invalid instruction: " + opcode)
 
-        self.grammar = SASS_GRAMMARS[self.name]
+        self.grammar = SASS_GRAMMARS[self.name] 
 
     def __str__(self):
         return self.full 
@@ -176,7 +190,7 @@ class Opcode(object):
         
     @property
     def is_64(self):
-        return self.grammar.is_64
+        return self.grammar.is_64 or (self.op_bit == 64)
         
 class Condition(object):
     def __init__(self, predicate, condition=True):
@@ -209,7 +223,6 @@ class Pointer(object):
     def __str__(self):
         return "[%s%s]" % (self.register, 
                         ("+" + str(self.offset)) if self.offset != 0 else "")
-
 
     def __repr__(self):
         return self.__str__()        
@@ -295,13 +308,14 @@ class Register(object):
         self.offset = offset
     
 class Constant(object):
-    def __init__(self, name, is_param = False, is_negative = False):
+    def __init__(self, name, is_param = False, is_negative = False, sign=None):
         self.name = name
         self.is_param = is_param
         self.is_negative = is_negative
+        self.sign = sign
 
     def __str__(self):
-        return "%s%s" % ( '-' if self.is_negative else '' ,self.name)
+        return "%s%s%s" % ( '-' if self.is_negative else '', self.sign if self.sign else '',self.name)
     
     def __repr__(self):
         return self.__str__()

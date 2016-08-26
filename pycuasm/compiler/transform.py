@@ -6,6 +6,7 @@ from pycuasm.compiler.hir import *
 from pycuasm.compiler.analysis import *
 
 def relocate_registers(program):
+    print("[REG_RELOC] Relocating registers.")
     program_regs = sorted(program.registers, key=lambda x: int(x.replace('R','')))
     #pprint(program_regs)
     
@@ -22,7 +23,7 @@ def relocate_registers(program):
         reg_cur_id = int(reg_cur.replace('R',''))
         reg_next = program_regs[idx+1]
         reg_next_id = int(reg_next.replace('R',''))
-        
+                
         if reg_cur_id + 1 == reg_next_id:
             idx = idx + 1
         elif reg_next not in reg_64:
@@ -35,7 +36,7 @@ def relocate_registers(program):
                 idx = idx + 1
             else:
                 reg_next_new_id = reg_cur_id + 1
-                reg_next_new = 'R%d' % reg_next_new_id        
+                reg_next_new = 'R%d' % reg_next_new_id
                 rename_register(program, Register(reg_next), Register(reg_next_new))
                 program_regs[idx+1] = reg_next_new
                 idx = idx + 1
@@ -59,9 +60,10 @@ def relocate_registers(program):
                 reg_skip.append(reg_next_new)
                 if reg_next_new_id != reg_next_id:
                     rename_register(program, Register(reg_next), Register('R%d' % (reg_next_new_id+1)))
-                    rename_register(program, Register(program_regs[idx+2]), Register('R%d' % (reg_next_new_id+2)))
+                    rename_register(program, Register('R%d' % (reg_next_id+1)), Register('R%d' % (reg_next_new_id+2)))
                     program_regs[idx+1] = 'R%d' % (reg_next_new_id+1)
                     program_regs[idx+2] = 'R%d' % (reg_next_new_id+2)
+                    pprint(program_regs)
                     idx = idx + 2
                 else:
                     idx = idx + 2
@@ -185,6 +187,16 @@ def spill_register_to_shared(
         # to spill_register just before the instruction. 
         # If the instruction write data to the spilled_register, store data from spill_register 
         # to shared memory right after the instruction.
+        inst_idx = program.ast.index(inst)
+        prev_idx = inst_idx-1
+        prev_inst = None
+        
+        if prev_idx > 0:
+            prev_inst = program.ast[prev_idx]
+            while not isinstance(prev_inst, Instruction):
+                prev_idx = prev_idx-1
+                prev_inst = program.ast[prev_idx]
+            
         for op in inst.operands:
             if isinstance(op, Pointer):
                 if target_register == op.register:
@@ -192,8 +204,11 @@ def spill_register_to_shared(
                     # Load data from shared memory
                     op.register.rename(spill_register)
                     # Set the instruction that read still register to wait for shared memory read 
-                    inst.flags.wait_barrier = inst.flags.wait_barrier | 0x3 
-                    program.ast.insert(program.ast.index(inst), copy.deepcopy(load_shr_inst))
+                    inst.flags.wait_barrier = inst.flags.wait_barrier | 0x3
+                    shared_load_inst = copy.deepcopy(load_shr_inst)
+                    if isinstance(prev_inst, SpillStoreInstruction):
+                         shared_load_inst.flags.wait_barrier = shared_load_inst.flags.wait_barrier | 0x8 
+                    program.ast.insert(program.ast.index(inst), shared_load_inst)
                     
             elif isinstance(op, Register):
                 if target_register == op:
@@ -202,7 +217,10 @@ def spill_register_to_shared(
                     inst.operands[inst.operands.index(op)].rename(spill_register)
                     # Set the instruction that read spill register to wait for shared memory read
                     inst.flags.wait_barrier = inst.flags.wait_barrier | 0x3
-                    program.ast.insert(program.ast.index(inst), copy.deepcopy(load_shr_inst))
+                    shared_load_inst = copy.deepcopy(load_shr_inst)
+                    if isinstance(prev_inst, SpillStoreInstruction):
+                         shared_load_inst.flags.wait_barrier = shared_load_inst.flags.wait_barrier | 0x8 
+                    program.ast.insert(program.ast.index(inst), shared_load_inst)
         
         if isinstance(inst.dest, Pointer):
             if target_register == inst.dest.register:
@@ -211,7 +229,10 @@ def spill_register_to_shared(
                 inst.dest.register.rename(spill_register)
                 # Set the instruction that read spill register to wait for shared memory read
                 inst.flags.wait_barrier = inst.flags.wait_barrier | 0x3
-                program.ast.insert(program.ast.index(inst), copy.deepcopy(load_shr_inst))
+                shared_load_inst = copy.deepcopy(load_shr_inst)
+                if isinstance(prev_inst, SpillStoreInstruction):
+                        shared_load_inst.flags.wait_barrier = shared_load_inst.flags.wait_barrier | 0x8 
+                program.ast.insert(program.ast.index(inst), shared_load_inst)
         elif isinstance(inst.dest, Register):
             if target_register == inst.dest:
                 # Write access
@@ -224,12 +245,17 @@ def spill_register_to_shared(
                 # Add 1 additional cycle to the store instruction. 
                 if inst.flags.write_barrier != 0:
                     st_inst.flags.wait_barrier = st_inst.flags.wait_barrier |( 1 << (inst.flags.write_barrier-1))
-                    inst.flags.stall = inst.flags.stall + 1    
+                    inst.flags.stall = inst.flags.stall + 1
                 else:
                     if(inst.opcode.grammar.type == 'gmem' or inst.opcode.grammar.type == 'smem'):
                         inst.flags.write_barrier = 6
                         st_inst.flags.wait_barrier = st_inst.flags.wait_barrier |( 1 << (inst.flags.write_barrier-1))
+                    elif (inst.opcode.name in ['RRO', 'MUFU']):
+                        if inst.flags.write_barrier == 0:
+                            inst.flags.write_barrier = 6
+                        st_inst.flags.wait_barrier = st_inst.flags.wait_barrier |( 1 << (inst.flags.write_barrier-1))
                     inst.flags.stall = 13 
+                    inst.flags.yield_hint = False
                 program.ast.insert(program.ast.index(inst) + 1, st_inst)
                 # Set wait flag of the next instruction to wait for store instruction to finish
                 inst_next = program.ast[program.ast.index(st_inst) + 1] 

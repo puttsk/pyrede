@@ -55,8 +55,7 @@ def analyse_register_accesses(program, register_list = None):
     
 def generate_spill_candidates(program, exclude_registers=[]):
     reg_64 = collect_64bit_registers(program)
-    #reg_mem =  collect_global_memory_access(program)
-    reg_mem = []
+    reg_mem =  collect_global_memory_access(program)
     
     reg_remove = list(itertools.chain(*reg_64.union(reg_mem))) + exclude_registers
     reg_candidates = sorted([ x for x in program.registers if x not in reg_remove], key=lambda x: int(x.replace('R','')))
@@ -94,13 +93,14 @@ def collect_64bit_registers(program):
                         reg64.add((inst.dest.name, next_inst.dest.name))
                         break
         
-        if (inst.opcode.type == 'x64'):
+        if (inst.opcode.is_64 or inst.opcode.type == 'x64'):
             for reg in [x for x in inst.operands if isinstance(x, Register)]:
                 reg_id = int(reg.name.replace('R',''))
                 reg64.add(("R%d" % reg_id, "R%d" % (reg_id+1)))
             if inst.reg_store:
                 reg_id = int(inst.dest.name.replace('R',''))
                 reg64.add(("R%d" % reg_id, "R%d" % (reg_id+1)))
+    
     return reg64
     
 def collect_global_memory_access(program):
