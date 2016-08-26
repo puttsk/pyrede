@@ -261,7 +261,7 @@ class Identifier(object):
         return self.__str__()
 
 class Register(object):
-    def __init__(self, register, is_special = False, is_negative = False, is_absolute = False):
+    def __init__(self, register, is_special = False, is_negative = False, is_absolute = False, sign=None):
         name = register.split('.')
         
         self.name = copy.deepcopy(name[0])
@@ -270,6 +270,7 @@ class Register(object):
         self.is_special = is_special
         self.is_negative = is_negative
         self.is_absolute = is_absolute
+        self.sign = sign
         
         self.carry_bit = 'CC' in self.extension
         self.offset = 0
@@ -282,8 +283,9 @@ class Register(object):
         return hash(self.name)
 
     def __str__(self):
-        return "%s%s%s%s%s%s%s" % ('|' if self.is_absolute else '',
+        return "%s%s%s%s%s%s%s%s" % ('|' if self.is_absolute else '',
                                    '-' if self.is_negative else '',
+                                   self.sign if self.sign else '',
                                    self.name,
                                    '|' if self.is_absolute else '', 
                                    '.' if self.extension else '', 

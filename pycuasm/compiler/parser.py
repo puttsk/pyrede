@@ -162,7 +162,8 @@ def p_register(p):
     '''register : REGISTER
                 | '|' REGISTER '|'
                 | '+' REGISTER
-                | '-' REGISTER  
+                | '-' REGISTER
+                | '~' REGISTER  
                 | '|' REGISTER '|' EXTENSION
     '''
     if len(p) == 2:
@@ -177,6 +178,8 @@ def p_register(p):
                 p[0] = Register(p[2], is_absolute = True)
         elif p[1] == '+':
             p[0] = Register(p[2])
+        elif p[1] == '~':
+            p[0] = Register(p[2], sign = p[1])
         else:
             raise SyntaxError(p)
 

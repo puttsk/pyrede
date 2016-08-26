@@ -56,7 +56,7 @@ def compile(args):
     
     if args.spill_register:
         print("[REG_SPILL] Spilling %d registers to shared memory. Threadblock Size: %d" % (args.spill_register, args.thread_block_size))
-        reg_candidates = generate_spill_candidates(program, exclude_registers=['R0','R1'])
+        reg_candidates = generate_spill_candidates(program, exclude_registers=['R0','R1', 'R22'])
         interference_dict = analyse_register_interference(program, reg_candidates)
         access_dict = analyse_register_accesses(program, reg_candidates)
         pprint(reg_candidates)
