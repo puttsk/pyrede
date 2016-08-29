@@ -56,34 +56,88 @@ def compile(args):
     
     if args.spill_register:
         print("[REG_SPILL] Spilling %d registers to shared memory. Threadblock Size: %d" % (args.spill_register, args.thread_block_size))
-        reg_candidates = generate_spill_candidates(program, exclude_registers=['R0','R1', 'R22'])
+        exclude_registers = ['R0', 'R1']
+        
+        if args.exclude_registers:
+            exclude_registers.append(args.exclude_registers)
+        
+        reg_candidates = generate_spill_candidates(program, exclude_registers=exclude_registers)
+        skipped_candidates = []
         interference_dict = analyse_register_interference(program, reg_candidates)
         access_dict = analyse_register_accesses(program, reg_candidates)
-        pprint(reg_candidates)
+        #pprint(reg_candidates)
 
         last_reg = sorted(program.registers, key=lambda x: int(x.replace('R','')), reverse=True)[0]
         last_reg_id = int(last_reg.replace('R',''))
 
         spilled_count = 0
         spilled_target = args.spill_register
+        
+        if (last_reg_id + 1) % 2 != 1:
+            last_reg_id = last_reg_id + 1
+
+        spill_register_id = last_reg_id + 2
+        spill_register_64_id = last_reg_id + 3
+        spill_register_addr_id = last_reg_id + 1
 
         while len(reg_candidates) > 0 and spilled_count < spilled_target:
             spilled_reg = reg_candidates.pop(0)
             spill_register_to_shared(
                 program, 
                 Register(spilled_reg), 
-                spill_register = Register('R%d' % (last_reg_id+1)),
-                spill_register_addr = Register('R%d' % (last_reg_id+2)),
+                spill_register = Register('R%d' % (spill_register_id)),
+                spill_register_addr = Register('R%d' % (spill_register_addr_id)),
                 thread_block_size=args.thread_block_size)
             
             for interference_reg in interference_dict[spilled_reg]:
                 if interference_reg in reg_candidates:
-                    print("Remove: ", interference_reg)
+                    print("[REG_SPILL] Remove candidate: ", interference_reg)
+                    skipped_candidates.append(interference_reg)
                     reg_candidates.remove(interference_reg)
             
             reg_candidates = sorted(reg_candidates, key=lambda x: access_dict[x]['read'] +  access_dict[x]['write'])
             spilled_count = spilled_count + 1
+        
+        print("[REG_SPILL] Spilled %d registers to shared memory." % (spilled_count))        
+        
+        if spilled_target - spilled_count > 0:
+            print("[REG_SPILL] Spilling 64-bit registers to shared memory.")
+             
+            reg_candidates = generate_64bit_spill_candidates(program)
+            reg_candidates_first_reg = [x[0] for x in reg_candidates]
             
+            interference_dict = analyse_register_interference(program, reg_candidates_first_reg)
+            access_dict = analyse_register_accesses(program, reg_candidates_first_reg)
+            
+            spilled_target = spilled_target + 1
+            
+            while len(reg_candidates) > 0 and spilled_count < spilled_target:
+                spilled_64bit_reg = reg_candidates.pop(0)
+                spill_register_to_shared(
+                    program, 
+                    Register(spilled_64bit_reg[0]), 
+                    spill_register = Register('R%d' % (spill_register_id)),
+                    spill_register_addr = Register('R%d' % (spill_register_addr_id)),
+                    thread_block_size=args.thread_block_size)
+                
+                spill_register_to_shared(
+                    program, 
+                    Register(spilled_64bit_reg[1]), 
+                    spill_register = Register('R%d' % (spill_register_64_id)),
+                    spill_register_addr = Register('R%d' % (spill_register_addr_id)),
+                    thread_block_size=args.thread_block_size)
+                
+                for interference_reg in interference_dict[spilled_64bit_reg[0]]:
+                    interference_reg_2 = 'R%d' % (int(interference_reg.replace('R','')) + 1)
+                    interference_reg_64 = (interference_reg, interference_reg_2)
+                    if interference_reg_64 in reg_candidates:
+                        print("[REG_SPILL] Remove candidate: ", interference_reg_64)
+                        skipped_candidates.append(interference_reg_64)
+                        reg_candidates.remove(interference_reg_64)
+                
+                reg_candidates = sorted(reg_candidates, key=lambda x: access_dict[x[0]]['read'] +  access_dict[x[0]]['write'])
+                spilled_count = spilled_count + 2            
+        
     if not args.no_register_relocation:
         relocate_registers(program)
     

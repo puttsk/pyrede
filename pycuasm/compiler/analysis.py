@@ -54,6 +54,7 @@ def analyse_register_accesses(program, register_list = None):
     return access_dict
     
 def generate_spill_candidates(program, exclude_registers=[]):
+    print("[ANA_SPILL] Generating spilled register candidates. Excluding registers: %s" % exclude_registers)
     reg_64 = collect_64bit_registers(program)
     #reg_mem =  collect_global_memory_access(program)
     reg_mem = []
@@ -68,6 +69,37 @@ def generate_spill_candidates(program, exclude_registers=[]):
     #pprint(access_dict)
 
     reg_candidates = sorted(reg_candidates, key=lambda x: access_dict[x]['read'] +  access_dict[x]['write'])
+    #reg_candidates = sorted(reg_candidates, key=lambda x: len(interference_dict[x]))
+
+    return reg_candidates
+    
+def generate_64bit_spill_candidates(program, exclude_registers=[]):
+    print("[ANA_SPILL] Generating spilled 64-bit register candidates. Excluding registers: %s" % exclude_registers)
+    list_64bit_registers = collect_64bit_registers(program)
+    #reg_mem =  collect_global_memory_access(program)
+    reg_mem = []
+    
+    pprint(list_64bit_registers)
+    
+    exclude_list = []
+    
+    list_64bit_registers = list(itertools.chain(list_64bit_registers.union(reg_mem)))
+    for reg64 in list_64bit_registers:
+        if int(reg64[0].replace('R','')) != (int(reg64[1].replace('R','')) - 1):
+            exclude_list.append(reg64)
+        
+    list_64bit_registers = [x for x in list_64bit_registers if x not in exclude_list]
+    reg_candidates = sorted(list_64bit_registers, key=lambda x: int(x[0].replace('R','')))
+
+    list_first_registers = [x[0] for x in list_64bit_registers]
+
+    interference_dict = analyse_register_interference(program, list_first_registers)
+    access_dict = analyse_register_accesses(program, list_first_registers)
+    
+    #pprint(interference_dict)
+    #pprint(access_dict)
+
+    reg_candidates = sorted(reg_candidates, key=lambda x: access_dict[x[0]]['read'] +  access_dict[x[0]]['write'])
     #reg_candidates = sorted(reg_candidates, key=lambda x: len(interference_dict[x]))
 
     return reg_candidates
@@ -91,9 +123,10 @@ def collect_64bit_registers(program):
                 
                 for next_inst in [x for x in program.ast[inst_pos:] if isinstance(x, Instruction)]:
                     if next_inst.opcode.use_carry_bit:
+                        #if abs(int(inst.dest.name.replace('R','')) - int(next_inst.dest.name.replace('R',''))) == 1: 
                         reg64.add((inst.dest.name, next_inst.dest.name))
                         break
-        
+    
         if (inst.opcode.is_64 or inst.opcode.type == 'x64'):
             for reg in [x for x in inst.operands if isinstance(x, Register)]:
                 reg_id = int(reg.name.replace('R',''))

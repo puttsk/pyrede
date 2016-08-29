@@ -12,12 +12,18 @@ def relocate_registers(program):
     
     #reg_mem =  collect_global_memory_access(program)
     reg_mem = []
-    reg_64 = collect_64bit_registers(program)    
+    reg_64 = collect_64bit_registers(program)
+    exclude_64 = []
+    for reg in reg_64:
+        if abs(int(reg[0].replace('R','')) - int(reg[1].replace('R',''))) != 1:
+            exclude_64.append(reg)
+    reg_64 = set([x for x in reg_64 if x not in exclude_64])            
     reg_64 = list(itertools.chain(*reg_64.union(reg_mem)))
-        
+    
     idx = 0;
     end = False
     reg_skip = []
+    
     while not end:
         reg_cur = program_regs[idx]
         reg_cur_id = int(reg_cur.replace('R',''))
@@ -63,7 +69,6 @@ def relocate_registers(program):
                     rename_register(program, Register('R%d' % (reg_next_id+1)), Register('R%d' % (reg_next_new_id+2)))
                     program_regs[idx+1] = 'R%d' % (reg_next_new_id+1)
                     program_regs[idx+2] = 'R%d' % (reg_next_new_id+2)
-                    pprint(program_regs)
                     idx = idx + 2
                 else:
                     idx = idx + 2
@@ -108,7 +113,7 @@ def rename_register(program, old_reg, new_reg):
             old_reg (Register): An original name of the register 
             new_reg (Register): A new name for the register 
     """
-    print("Renaming %s to %s" % (old_reg, new_reg))
+    print("[REG_RNAME] Renaming %s to %s" % (old_reg, new_reg))
     rename_registers(program, {old_reg.name:new_reg.name})
     
 def spill_register_to_shared(
@@ -127,7 +132,7 @@ def spill_register_to_shared(
             thread_block_size (int): Size of thread block  
     """
     # TODO: Find free barrier for LDS Instruction
-    print("Replacing %s with shared memory (TB:%d)" % (target_register, thread_block_size))
+    print("[REG_SPILL] Replacing %s with shared memory %s[%s] (TB:%d)" % (target_register,spill_register, spill_register_addr, thread_block_size))
     
     tid_reg = None
     tid_inst = 0    
@@ -262,5 +267,5 @@ def spill_register_to_shared(
                 if isinstance(inst_next, Instruction):
                     inst_next.flags.wait_barrier = inst_next.flags.wait_barrier | 8 
                   
-    print("Read accesses: %d Write accesses: %d" % (r_count, w_count))   
+    print("[REG_SPILL] Read accesses: %d Write accesses: %d" % (r_count, w_count))   
     program.update()
