@@ -96,9 +96,7 @@ def compile(args):
                     reg_candidates.remove(interference_reg)
             
             reg_candidates = sorted(reg_candidates, key=lambda x: access_dict[x]['read'] +  access_dict[x]['write'])
-            spilled_count = spilled_count + 1
-        
-        print("[REG_SPILL] Spilled %d registers to shared memory." % (spilled_count))        
+            spilled_count = spilled_count + 1        
         
         if spilled_target - spilled_count > 0:
             print("[REG_SPILL] Spilling 64-bit registers to shared memory.")
@@ -113,20 +111,14 @@ def compile(args):
             
             while len(reg_candidates) > 0 and spilled_count < spilled_target:
                 spilled_64bit_reg = reg_candidates.pop(0)
-                spill_register_to_shared(
+                spill_64bit_register_to_shared(
                     program, 
-                    Register(spilled_64bit_reg[0]), 
+                    spilled_64bit_reg, 
                     spill_register = Register('R%d' % (spill_register_id)),
+                    spill_register2 = Register('R%d' % (spill_register_64_id)),
                     spill_register_addr = Register('R%d' % (spill_register_addr_id)),
                     thread_block_size=args.thread_block_size)
-                
-                spill_register_to_shared(
-                    program, 
-                    Register(spilled_64bit_reg[1]), 
-                    spill_register = Register('R%d' % (spill_register_64_id)),
-                    spill_register_addr = Register('R%d' % (spill_register_addr_id)),
-                    thread_block_size=args.thread_block_size)
-                
+                                
                 for interference_reg in interference_dict[spilled_64bit_reg[0]]:
                     interference_reg_2 = 'R%d' % (int(interference_reg.replace('R','')) + 1)
                     interference_reg_64 = (interference_reg, interference_reg_2)
@@ -136,7 +128,10 @@ def compile(args):
                         reg_candidates.remove(interference_reg_64)
                 
                 reg_candidates = sorted(reg_candidates, key=lambda x: access_dict[x[0]]['read'] +  access_dict[x[0]]['write'])
-                spilled_count = spilled_count + 2            
+                spilled_count = spilled_count + 2 
+        
+        print("[REG_SPILL] Spilled %d registers to shared memory." % (spilled_count))
+        print("[REG_SPILL] %d %d %d" % (spill_register_id, spill_register_64_id, spill_register_addr_id))
         
     if not args.no_register_relocation:
         relocate_registers(program)

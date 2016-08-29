@@ -42,6 +42,7 @@ class Program(object):
                     addr += 8
                 
                 regs = [x for x in inst.operands + [inst.dest] if isinstance(x, Register) and not x.is_special]
+                ptrs = [x.register for x in inst.operands + [inst.dest] if isinstance(x, Pointer)]
                 
                 if inst.opcode.name == 'LDG' and inst.opcode.op_bit > 32:
                     reg_count = int(inst.opcode.op_bit / 32)
@@ -52,6 +53,7 @@ class Program(object):
                         regs.append(Register('R%d' % (reg_id + i))) 
                 
                 registers += sorted([x.name for x in regs if x.name not in registers])
+                registers += sorted([x.name for x in ptrs if x.name not in registers])
                 
             elif isinstance(inst, Label):
                 inst.addr = addr
