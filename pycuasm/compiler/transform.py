@@ -132,7 +132,7 @@ def spill_register_to_shared(
             thread_block_size (int): Size of thread block  
     """
     # TODO: Find free barrier for LDS Instruction
-    print("[REG_SPILL] Replacing %s with shared memory %s[%s] (TB:%d)" % (target_register,spill_register, spill_register_addr, thread_block_size))
+    print("[REG_SPILL] Replacing %s with shared memory %s[%s] (TB:%d Offset:%d)" % (target_register,spill_register, spill_register_addr, thread_block_size,program.shared_size ))
     
     tid_reg = None
     tid_inst = 0    
@@ -143,6 +143,8 @@ def spill_register_to_shared(
     # ASSUME: 1D thread block
     # TODO: Add support for 2d and 3d thread block
     if not getattr(program, 'shared_spill_count', False):
+        tid_inst_copy = None
+        
         # Add new parameter
         setattr(program, 'shared_spill_count', 0)
         
@@ -154,16 +156,20 @@ def spill_register_to_shared(
                 if inst.operands[0].name == 'SR_TID':
                     tid_reg = inst.dest
                     tid_inst = inst
+                    tid_inst_copy = copy.deepcopy(inst)
                     break
         
         # Compute wait flag
         wait_flag = 1 << (tid_inst.flags.write_barrier-1)
-        tid_inst.flags.stall = tid_inst.flags.stall + 1
+        tid_inst_copy.flags.stall = tid_inst.flags.stall + 1
+        #tid_inst.flags.stall = tid_inst.flags.stall + 1
         # Compute base address for spilled register
         base_addr_inst = Instruction(Flags(hex(wait_flag),'-','-','-','d'), 
             Opcode('SHL'), 
             operands=[spill_register_addr, tid_reg, 0x02])
-        program.ast.insert(program.ast.index(tid_inst) + 1, base_addr_inst)
+        #program.ast.insert(program.ast.index(tid_inst) + 1, base_addr_inst)
+        program.ast.insert(1, tid_inst_copy)
+        program.ast.insert(2, base_addr_inst)
     
     # Assign the spilled register Identifier
     spill_reg_id = program.shared_spill_count
@@ -443,7 +449,9 @@ def spill_64bit_register_to_shared(
                     
                     # Set wait flag if the previous instruction sets write dependence flag. 
                     # This will happen if the instruction store data in the spilled register.
-                    # Add 1 additional cycle to the store instruction. 
+                    # Add 1 additional cycle to the store instruction.
+                    if inst.flags.read_barrier != 0:
+                        st_inst.flags.wait_barrier = st_inst.flags.wait_barrier |( 1 << (inst.flags.read_barrier-1)) 
                     if inst.flags.write_barrier != 0:
                         st_inst.flags.wait_barrier = st_inst.flags.wait_barrier |( 1 << (inst.flags.write_barrier-1))
                         if inst.flags.stall < 15: 

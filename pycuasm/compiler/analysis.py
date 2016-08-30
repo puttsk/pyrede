@@ -58,6 +58,18 @@ def generate_spill_candidates(program, exclude_registers=[]):
     reg_64 = collect_64bit_registers(program)
     #reg_mem =  collect_global_memory_access(program)
     reg_mem = []
+    #pprint(reg_64)
+    
+    for inst in [x for x in program.ast if isinstance(x, Instruction)]:
+        if inst.opcode.op_bit > 32:
+            # Handle multi-word load instruction e.g. LDG.E.128 R4 [R0], which load 4 32-bit words to R4, R5, R6, and R7
+            # TODO: Might need to implement this for 32-bit spilling as well
+            dest_list = []
+            start_reg_id = int(inst.dest.name.replace('R',''))
+            for i in range (0, int(inst.opcode.op_bit/32), 2):
+                dest_list.append(('R%d' % (start_reg_id + i), 'R%d' % (start_reg_id + i + 1)))
+            #pprint(dest_list)
+            exclude_registers += dest_list
     
     reg_remove = list(itertools.chain(*reg_64.union(reg_mem))) + exclude_registers
     reg_candidates = sorted([ x for x in program.registers if x not in reg_remove], key=lambda x: int(x.replace('R','')))

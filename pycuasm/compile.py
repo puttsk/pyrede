@@ -65,7 +65,7 @@ def compile(args):
         skipped_candidates = []
         interference_dict = analyse_register_interference(program, reg_candidates)
         access_dict = analyse_register_accesses(program, reg_candidates)
-        #pprint(reg_candidates)
+        pprint(reg_candidates)
 
         last_reg = sorted(program.registers, key=lambda x: int(x.replace('R','')), reverse=True)[0]
         last_reg_id = int(last_reg.replace('R',''))

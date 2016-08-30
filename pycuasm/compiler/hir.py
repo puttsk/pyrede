@@ -162,7 +162,10 @@ class Opcode(object):
         if self.name not in SASS_GRAMMARS:
             raise ValueError("Invalid instruction: " + opcode)
 
-        self.grammar = SASS_GRAMMARS[self.name] 
+        self.grammar = SASS_GRAMMARS[self.name]
+        
+        if self.grammar.is_64:
+            self.op_bit = 64 
 
     def __str__(self):
         return self.full 
