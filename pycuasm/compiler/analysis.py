@@ -61,13 +61,19 @@ def generate_spill_candidates(program, exclude_registers=[]):
     #pprint(reg_64)
     
     for inst in [x for x in program.ast if isinstance(x, Instruction)]:
-        if inst.opcode.op_bit > 32:
+        if inst.opcode.op_bit > 32 and (inst.opcode.type == 'gmem' or inst.opcode.type == 'smem'):
             # Handle multi-word load instruction e.g. LDG.E.128 R4 [R0], which load 4 32-bit words to R4, R5, R6, and R7
             # TODO: Might need to implement this for 32-bit spilling as well
             dest_list = []
-            start_reg_id = int(inst.dest.name.replace('R',''))
-            for i in range (0, int(inst.opcode.op_bit/32), 2):
-                dest_list.append(('R%d' % (start_reg_id + i), 'R%d' % (start_reg_id + i + 1)))
+            pprint(inst)
+            if "LD" in inst.opcode.name:
+                start_reg_id = int(inst.dest.name.replace('R',''))
+                for i in range (0, int(inst.opcode.op_bit/32), 2):
+                    dest_list.append(('R%d' % (start_reg_id + i), 'R%d' % (start_reg_id + i + 1)))
+            elif "ST" in inst.opcode.name:
+                start_reg_id = int(inst.operands[1].name.replace('R',''))
+                for i in range (0, int(inst.opcode.op_bit/32), 2):
+                    dest_list.append(('R%d' % (start_reg_id + i), 'R%d' % (start_reg_id + i + 1)))
             #pprint(dest_list)
             exclude_registers += dest_list
     
@@ -101,13 +107,19 @@ def generate_64bit_spill_candidates(program, exclude_registers=[]):
             exclude_list.append(reg64)
     
     for inst in [x for x in program.ast if isinstance(x, Instruction)]:
-        if inst.opcode.name == 'LDG' and inst.opcode.op_bit > 32:
+        if inst.opcode.op_bit > 32 and (inst.opcode.type == 'gmem' or inst.opcode.type == 'smem'):
             # Handle multi-word load instruction e.g. LDG.E.128 R4 [R0], which load 4 32-bit words to R4, R5, R6, and R7
             # TODO: Might need to implement this for 32-bit spilling as well
             dest_list = []
-            start_reg_id = int(inst.dest.name.replace('R',''))
-            for i in range (0, int(inst.opcode.op_bit/32), 2):
-                dest_list.append(('R%d' % (start_reg_id + i), 'R%d' % (start_reg_id + i + 1)))
+            pprint(inst)
+            if "LD" in inst.opcode.name:
+                start_reg_id = int(inst.dest.name.replace('R',''))
+                for i in range (0, int(inst.opcode.op_bit/32), 2):
+                    dest_list.append(('R%d' % (start_reg_id + i), 'R%d' % (start_reg_id + i + 1)))
+            elif "ST" in inst.opcode.name:
+                start_reg_id = int(inst.operands[1].name.replace('R',''))
+                for i in range (0, int(inst.opcode.op_bit/32), 2):
+                    dest_list.append(('R%d' % (start_reg_id + i), 'R%d' % (start_reg_id + i + 1)))
             #pprint(dest_list)
             exclude_list += dest_list
     
@@ -126,6 +138,9 @@ def generate_64bit_spill_candidates(program, exclude_registers=[]):
 
     reg_candidates = sorted(reg_candidates, key=lambda x: access_dict[x[0]]['read'] +  access_dict[x[0]]['write'])
     #reg_candidates = sorted(reg_candidates, key=lambda x: len(interference_dict[x]))
+
+    #pprint(reg_candidates)
+    #reg_candidates = [('R20', 'R21'), ('R30', 'R31')]
 
     return reg_candidates
 

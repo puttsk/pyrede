@@ -136,21 +136,7 @@ def compile(args):
     if not args.no_register_relocation:
         relocate_registers(program)
     
-    '''
-    last_reg = sorted(program.registers, key=lambda x: int(x.replace('R','')), reverse=True)[0]
-    last_reg_id = int(last_reg.replace('R',''))
-    
-    spill_register_to_shared(
-            program, 
-            Register('R34'), 
-            spill_register = Register('R%d' % (last_reg_id+1)),
-            spill_register_addr = Register('R%d' % (last_reg_id+2)),
-            thread_block_size=args.thread_block_size)
-    '''
-    #pprint(generate_spill_candidates(program, exclude_registers=['R0','R1']))
     program.save(args.output)
-    
-    #myocyte_register_sweep(program, size=1)
     return
     
 def test_lexer(sass):
