@@ -164,7 +164,7 @@ def spill_register_to_shared(
         tid_inst_copy.flags.stall = tid_inst.flags.stall + 1
         #tid_inst.flags.stall = tid_inst.flags.stall + 1
         # Compute base address for spilled register
-        base_addr_inst = Instruction(Flags(hex(wait_flag),'-','-','-','d'), 
+        base_addr_inst = Instruction(Flags(hex(wait_flag),'-','-','-','6'), 
             Opcode('SHL'), 
             operands=[spill_register_addr, tid_reg, 0x02])
         #program.ast.insert(program.ast.index(tid_inst) + 1, base_addr_inst)
@@ -176,17 +176,15 @@ def spill_register_to_shared(
     spill_offset = spill_reg_id * thread_block_size * 4 + program.shared_size
     program.shared_spill_count += 1
         
-    load_shr_inst = SpillLoadInstruction(Flags('--','1','2','-','d'), 
+    load_shr_inst = SpillLoadInstruction(Flags('--','1','2','-','6'), 
                         Opcode('LDS'),
                         operands=[spill_register, Pointer(spill_register_addr, spill_offset),
-                            #Register(spilled_register.name + 'S')
                         ])
     
     # Add read barrier to make sure that the STS instruction is completed before next instreuction
-    store_shr_inst = SpillStoreInstruction(Flags('--','4','-','-','d'), 
+    store_shr_inst = SpillStoreInstruction(Flags('--','4','-','-','6'), 
                         Opcode('STS'),
                         operands=[Pointer(spill_register_addr, spill_offset), spill_register, 
-                            #Register(spilled_register.name + 'S')
                         ])
     
     w_count = 0
@@ -321,7 +319,7 @@ def spill_64bit_register_to_shared(
         wait_flag = 1 << (tid_inst.flags.write_barrier-1)
         tid_inst.flags.stall = tid_inst.flags.stall + 1
         # Compute base address for spilled register
-        base_addr_inst = Instruction(Flags(hex(wait_flag),'-','-','-','d'), 
+        base_addr_inst = Instruction(Flags(hex(wait_flag),'-','-','-','6'), 
             Opcode('SHL'), 
             operands=[spill_register_addr, tid_reg, 0x02])
         program.ast.insert(program.ast.index(tid_inst) + 1, base_addr_inst)
@@ -336,27 +334,23 @@ def spill_64bit_register_to_shared(
     
     program.shared_spill_count += 2
         
-    load_shr_inst = SpillLoadInstruction(Flags('--','1','2','-','d'), 
+    load_shr_inst = SpillLoadInstruction(Flags('--','1','2','-','6'), 
                         Opcode('LDS'),
                         operands=[spill_register, Pointer(spill_register_addr, spill_offset),
-                            #Register(spilled_register.name + 'S')
                         ])
-    load_shr_inst2 = SpillLoadInstruction(Flags('--','1','2','-','d'), 
+    load_shr_inst2 = SpillLoadInstruction(Flags('--','1','2','-','6'), 
                         Opcode('LDS'),
                         operands=[spill_register2, Pointer(spill_register_addr, spill_offset2),
-                            #Register(spilled_register.name + 'S')
                         ])
     
     # Add read barrier to make sure that the STS instruction is completed before next instreuction
-    store_shr_inst = SpillStoreInstruction(Flags('--','4','-','-','d'), 
+    store_shr_inst = SpillStoreInstruction(Flags('--','4','-','-','6'), 
                         Opcode('STS'),
                         operands=[Pointer(spill_register_addr, spill_offset), spill_register, 
-                            #Register(spilled_register.name + 'S')
                         ])
-    store_shr_inst2 = SpillStoreInstruction(Flags('--','4','-','-','d'), 
+    store_shr_inst2 = SpillStoreInstruction(Flags('--','4','-','-','6'), 
                         Opcode('STS'),
                         operands=[Pointer(spill_register_addr, spill_offset2), spill_register2, 
-                            #Register(spilled_register.name + 'S')
                         ])
     
     w_count = 0

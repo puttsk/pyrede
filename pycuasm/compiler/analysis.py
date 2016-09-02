@@ -65,7 +65,7 @@ def generate_spill_candidates(program, exclude_registers=[]):
             # Handle multi-word load instruction e.g. LDG.E.128 R4 [R0], which load 4 32-bit words to R4, R5, R6, and R7
             # TODO: Might need to implement this for 32-bit spilling as well
             dest_list = []
-            pprint(inst)
+            #pprint(inst)
             if "LD" in inst.opcode.name:
                 start_reg_id = int(inst.dest.name.replace('R',''))
                 for i in range (0, int(inst.opcode.op_bit/32), 2):
