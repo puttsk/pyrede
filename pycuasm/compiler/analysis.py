@@ -75,7 +75,7 @@ def generate_spill_candidates(program, exclude_registers=[]):
                 for i in range (0, int(inst.opcode.op_bit/32), 2):
                     dest_list.append(('R%d' % (start_reg_id + i), 'R%d' % (start_reg_id + i + 1)))
             #pprint(dest_list)
-            exclude_registers += dest_list
+            exclude_registers += list(itertools.chain(*dest_list))
     
     reg_remove = list(itertools.chain(*reg_64.union(reg_mem))) + exclude_registers
     reg_candidates = sorted([ x for x in program.registers if x not in reg_remove], key=lambda x: int(x.replace('R','')))

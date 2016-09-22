@@ -24,7 +24,7 @@ def relocate_registers(program):
     end = False
     reg_skip = []   
     
-    while not end:
+    while not end: 
         reg_cur = program_regs[idx]
         reg_cur_id = int(reg_cur.replace('R',''))
         reg_next = program_regs[idx+1]
@@ -134,6 +134,8 @@ def spill_register_to_shared(
     # TODO: Find free barrier for LDS Instruction
     print("[REG_SPILL] Replacing %s with shared memory %s[%s] (TB:%d Offset:%d)" % (target_register,spill_register, spill_register_addr, thread_block_size,program.shared_size ))
     
+    is_2d_thread_block = False
+    
     tid_reg = None
     tid_inst = 0    
     # If this is the first time a register is spilled to shared memory,
@@ -147,13 +149,63 @@ def spill_register_to_shared(
         
         # Add new parameter
         setattr(program, 'shared_spill_count', 0)
+                
+        # Check if the kernel uses 2D thread block
+        for inst in program.ast:
+            if not isinstance(inst, Instruction):
+                continue
+            if inst.opcode.name == 'S2R':
+                # Look for S2R R19, SR_TID.X instruction.
+                if inst.operands[0].name == 'SR_TID' and 'Y' in inst.operands[0].extension:
+                    is_2d_thread_block = True
+                    break
         
+        if is_2d_thread_block:
+            tid_x_inst = Instruction(Flags('--','-','1','-','6'), 
+                Opcode('S2R'), 
+                operands=[Register('R2'), Register('SR_TID.X', is_special=True)])
+            
+            tid_y_inst = Instruction(Flags('--','-','2','-','6'), 
+                Opcode('S2R'), 
+                operands=[Register('R3'), Register('SR_TID.Y', is_special=True)])
+            
+            block_dim_x_inst = Instruction(Flags('--','-','3','-','6'), 
+                Opcode('MOV'), 
+                operands=[Register('R4'), 'blockDimX'])
+            
+            tid_mad_inst = Instruction(Flags('07','-','1','-','6'), 
+                Opcode('XMAD'), 
+                operands=[Register('R2'), Register('R3'), Register('R4'), Register('R2')])
+            
+            base_addr_inst = Instruction(Flags('01','-','-','-','6'), 
+                Opcode('SHL'), 
+                operands=[spill_register_addr, Register('R2'), 0x02])
+
+            program.ast.insert(1, tid_x_inst)
+            program.ast.insert(2, tid_y_inst)
+            program.ast.insert(3, block_dim_x_inst)
+            program.ast.insert(4, tid_mad_inst)
+            program.ast.insert(5, base_addr_inst)
+        else:
+            tid_x_inst = Instruction(Flags('--','-','1','-','6'), 
+                Opcode('S2R'), 
+                operands=[Register('R2'), Register('SR_TID.X', is_special=True)])
+            
+            base_addr_inst = Instruction(Flags('01','-','-','-','6'), 
+                Opcode('SHL'), 
+                operands=[spill_register_addr, Register('R2'), 0x02])
+
+            program.ast.insert(1, tid_x_inst)
+            program.ast.insert(2, base_addr_inst)
+                
+        '''
         # Find register containing thread id
         for inst in program.ast:
             if not isinstance(inst, Instruction):
                 continue
             if inst.opcode.name == 'S2R':
-                if inst.operands[0].name == 'SR_TID':
+                # Look for S2R R19, SR_TID.X instruction.
+                if inst.operands[0].name == 'SR_TID' and 'X' in inst.operands[0].extension:
                     tid_reg = inst.dest
                     tid_inst = inst
                     tid_inst_copy = copy.deepcopy(inst)
@@ -170,6 +222,7 @@ def spill_register_to_shared(
         #program.ast.insert(program.ast.index(tid_inst) + 1, base_addr_inst)
         program.ast.insert(1, tid_inst_copy)
         program.ast.insert(2, base_addr_inst)
+        '''
     
     # Assign the spilled register Identifier
     spill_reg_id = program.shared_spill_count

@@ -74,6 +74,8 @@ class Program(object):
         for inst in self.ast:  
             f.write(str(inst) + '\n')
         f.close()
+
+        print("[CUASM] %s Saved." % outfile)
             
 
 class Instruction(object):
