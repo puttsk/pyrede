@@ -11,7 +11,7 @@ t_ignore  = ' \t'
 t_ignore_COMMENT = r'\#.*'
 
 def t_CONSTANT(t): 
-    r'c\[0x[0-9abcdefABCDEF]+\]\[0x[0-9abcdefABCDEF]+\]'
+    r'c\[0x[0-9abcdefABCDEF]+\][ ]?\[0x[0-9abcdefABCDEF]+\]'
     return t
 
 def t_HEXADECIMAL(t):

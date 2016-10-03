@@ -298,6 +298,10 @@ def extract(args):
             if inst.opcode in JUMP_OPS and re.search("(?P<target>0x[0-9a-f]+)", inst.inst):
                 m = re.search("(?P<target>0x[0-9a-f]+)", inst.inst)
                 target = int(m.group('target'), 16)
+                # Special case when linked SYNC is just before control instruction
+                #if inst.opcode == 'SSY':
+                #if target % 32 == 0:
+                #    target = target + 8
                 
                 # Skip the final BRA and stop processing the file
                 if inst.opcode == 'BRA' and (target == inst.line or target == inst.line - 8):

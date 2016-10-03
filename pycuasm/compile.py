@@ -135,7 +135,7 @@ def compile(args):
         
     if not args.no_register_relocation:
         relocate_registers(program)
-    
+        
     program.save(args.output)
     return
     

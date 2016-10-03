@@ -19,10 +19,10 @@ def relocate_registers(program):
             exclude_64.append(reg)
     reg_64 = set([x for x in reg_64 if x not in exclude_64])            
     reg_64 = list(itertools.chain(*reg_64.union(reg_mem)))
-    
+
     idx = 0;
     end = False
-    reg_skip = []   
+    reg_skip = []  
     
     while not end: 
         reg_cur = program_regs[idx]
@@ -63,7 +63,8 @@ def relocate_registers(program):
                 # The available register is an odd register.
                 # The 64-bit register cannot be start with an odd register. 
                 # Stores the odd register in reg_skip list and move to the next register
-                reg_skip.append(reg_next_new)
+                if reg_next_new not in reg_64:
+                    reg_skip.append(reg_next_new)
                 if reg_next_new_id != reg_next_id:
                     rename_register(program, Register(reg_next), Register('R%d' % (reg_next_new_id+1)))
                     rename_register(program, Register('R%d' % (reg_next_id+1)), Register('R%d' % (reg_next_new_id+2)))
@@ -169,15 +170,15 @@ def spill_register_to_shared(
                 Opcode('S2R'), 
                 operands=[Register('R3'), Register('SR_TID.Y', is_special=True)])
             
-            block_dim_x_inst = Instruction(Flags('--','-','3','-','6'), 
+            block_dim_x_inst = Instruction(Flags('--','-','-','-','6'), 
                 Opcode('MOV'), 
                 operands=[Register('R4'), 'blockDimX'])
             
-            tid_mad_inst = Instruction(Flags('07','-','1','-','6'), 
+            tid_mad_inst = Instruction(Flags('03','-','-','-','6'), 
                 Opcode('XMAD'), 
                 operands=[Register('R2'), Register('R3'), Register('R4'), Register('R2')])
             
-            base_addr_inst = Instruction(Flags('01','-','-','-','6'), 
+            base_addr_inst = Instruction(Flags('--','-','-','-','6'), 
                 Opcode('SHL'), 
                 operands=[spill_register_addr, Register('R2'), 0x02])
 
@@ -197,7 +198,7 @@ def spill_register_to_shared(
 
             program.ast.insert(1, tid_x_inst)
             program.ast.insert(2, base_addr_inst)
-                
+
         '''
         # Find register containing thread id
         for inst in program.ast:

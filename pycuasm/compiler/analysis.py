@@ -171,10 +171,10 @@ def collect_64bit_registers(program):
             for reg in [x for x in inst.operands if isinstance(x, Register)]:
                 reg_id = int(reg.name.replace('R',''))
                 reg64.add(("R%d" % reg_id, "R%d" % (reg_id+1)))
-            if inst.reg_store:
+            if inst.reg_store and inst.dest:
                 reg_id = int(inst.dest.name.replace('R',''))
                 reg64.add(("R%d" % reg_id, "R%d" % (reg_id+1)))
-    
+                
     return reg64
     
 def collect_global_memory_access(program):

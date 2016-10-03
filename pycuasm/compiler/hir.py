@@ -100,7 +100,12 @@ class Instruction(object):
                                        (" " + ", ".join([str(x) for x in self.operands])) if self.operands else ""
                                        )
         else:
-            return "%s\t%s {%s};" % (self.flags, self.opcode, 
+            # For example DEPBAR.LE SB5, 0x4;
+            if self.opcode.extension:
+                return "%s\t%s %s;" % (self.flags, self.opcode, 
+                                     (", ".join([str(x) for x in self.operands])))
+            else:    
+                return "%s\t%s {%s};" % (self.flags, self.opcode, 
                                      (",".join([str(x) for x in self.operands[0][1] if x != '{' and x != '}'])))
 
     def __repr__(self):
@@ -290,8 +295,9 @@ class Register(object):
         return hash(self.name)
 
     def __str__(self):
-        return "%s%s%s%s%s%s%s%s" % ('|' if self.is_absolute else '',
+        return "%s%s%s%s%s%s%s%s" % (
                                    '-' if self.is_negative else '',
+                                   '|' if self.is_absolute else '',
                                    self.sign if self.sign else '',
                                    self.name,
                                    '|' if self.is_absolute else '', 
@@ -317,14 +323,15 @@ class Register(object):
         self.offset = offset
     
 class Constant(object):
-    def __init__(self, name, is_param = False, is_negative = False, sign=None):
+    def __init__(self, name, is_param = False, is_negative = False, sign=None, extension = ''):
         self.name = name
         self.is_param = is_param
         self.is_negative = is_negative
         self.sign = sign
+        self.extension = extension
 
     def __str__(self):
-        return "%s%s%s" % ( '-' if self.is_negative else '', self.sign if self.sign else '',self.name)
+        return "%s%s%s%s" % ( '-' if self.is_negative else '', self.sign if self.sign else '',self.name, self.extension)
     
     def __repr__(self):
         return self.__str__()

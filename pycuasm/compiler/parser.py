@@ -124,13 +124,18 @@ def p_constant(p):
     '''constant : CONSTANT
                 | '-' CONSTANT
                 | ID '[' immediate_hex ']' pointer
+                | CONSTANT EXTENSION
     '''
     # TODO: SASS allows indirect access to constant memory e.g. c[0x00][R4]
     #       Need to have a better parser for this.
     if len(p) == 2:
         p[0] = Constant(p[1])
     elif len(p) == 3:
-        p[0] = Constant(p[2], is_negative=True)
+        if p[1] == '-':
+            p[0] = Constant(p[2], is_negative=True)
+        else:
+            p[0] = Constant(p[1], extension = p[2])
+            
     else:
         p[0] = Constant(p[1] + p[2] + str(p[3]) + p[4] + str(p[5]))
     
@@ -165,12 +170,16 @@ def p_register(p):
                 | '-' REGISTER
                 | '~' REGISTER  
                 | '|' REGISTER '|' EXTENSION
+                | '-' '|' REGISTER '|' 
     '''
     if len(p) == 2:
         p[0] = Register(p[1])
     else:
         if p[1] == '-':
-            p[0] = Register(p[2], is_negative = True)
+            if p[2] != '|':
+                p[0] = Register(p[2], is_negative = True)
+            else:
+                p[0] = Register(p[3], is_negative = True, is_absolute = True)
         elif p[1] == '|' and p[3] == '|':
             if len(p) == 5:
                 p[0] = Register(p[2]+p[4], is_absolute = True)
