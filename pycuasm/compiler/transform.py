@@ -63,8 +63,8 @@ def relocate_registers(program):
                 # The available register is an odd register.
                 # The 64-bit register cannot be start with an odd register. 
                 # Stores the odd register in reg_skip list and move to the next register
-                if reg_next_new not in reg_64:
-                    reg_skip.append(reg_next_new)
+                #if reg_next_new not in reg_64:
+                reg_skip.append(reg_next_new)
                 if reg_next_new_id != reg_next_id:
                     rename_register(program, Register(reg_next), Register('R%d' % (reg_next_new_id+1)))
                     rename_register(program, Register('R%d' % (reg_next_id+1)), Register('R%d' % (reg_next_new_id+2)))
