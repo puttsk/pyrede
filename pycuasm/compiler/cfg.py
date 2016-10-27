@@ -3,9 +3,8 @@ from pycuasm.compiler.hir import *
 
 import json
 
-REL_OFFSETS = ['BRA', 'SSY', 'CAL', 'PBK', 'PCNT']
-ABS_OFFSETS = ['JCAL']
-JUMP_OPS = REL_OFFSETS + ABS_OFFSETS
+JUMP_OPS = ['BRA', 'PBK', 'PCNT', 'SYNC']
+CALL_OPS = ['CAL', 'JCAL'] 
 
 class RegisterAccess(object):
     def __init__(self, first_read=-1, first_write=-1, next_write=-1, last_read=-1, read_count=0):
@@ -59,6 +58,22 @@ class EndBlock(Block):
     def __repr__(self):
         return "<End>"
 
+class CallBlock(Block):
+    def __init__(self):
+        super().__init__()
+        self.input = []
+        self.output = []        
+
+    def __repr__(self):
+        return "<Function Call>"
+    
+    def update(self):
+        pass
+        
+class ReturnBlock(Block):
+    def __repr__(self):
+        return "<Return>"
+
 class BasicBlock(Block):
     def __init__(self, instructions, label=None, taken=None, not_taken=None):
         super().__init__(taken, not_taken)
@@ -72,6 +87,7 @@ class BasicBlock(Block):
         
         self.label = label
         self.condition = self.instructions[-1].condition
+        self.sync_point = None
         
         self.var_use = set()
         self.var_def = set()
@@ -89,6 +105,9 @@ class BasicBlock(Block):
                 
                 ptrs = [x for x in inst.operands + [inst.dest] if isinstance(x, Pointer)]
                 pointers += [x for x in ptrs if x not in pointers]
+                
+                if inst.opcode.name == 'SSY':
+                    self.sync_point = inst.operands[0].name
             else:
                 raise ValueError("Invalid IR Type: %s %s" % (inst.__class__, inst))
 
@@ -159,6 +178,13 @@ class BasicBlock(Block):
             if reg_write_map[reg] and len(reg_write_map[reg]) > 0:
                 self.var_def.add(reg)
     
+    def get_call_targets(self):
+        call_targets = []
+        for inst in self.instructions:
+            if inst.opcode.name in CALL_OPS:
+                call_targets.append(inst.operands[0].name)
+        return call_targets
+    
     def get_dot_node(self):
         repr = ''
         for inst in self.instructions:
@@ -173,8 +199,6 @@ class BasicBlock(Block):
     def attach_label(self, label):
         self.label = label
     
-    
-
 class Cfg(object):
     """ Control flow graph
     """
@@ -184,6 +208,7 @@ class Cfg(object):
                 program: A program object generated from parser
         """
         self.__blocks = []
+        self.__functions = {}
         if program:
             self.update_cfg(program)    
             self.analyze_liveness();
@@ -193,7 +218,7 @@ class Cfg(object):
         for block in self.__blocks:
             repr += "%s\n\t%s\n\t%s\n" % (block, block.taken, block.not_taken)
             repr += "\tPred:%s\n" % block.pred
-        return repr
+        return repr    
     
     @property
     def blocks(self):
@@ -201,6 +226,9 @@ class Cfg(object):
     
     def add_basic_block(self, block):
         self.__blocks.append(block)
+    
+    def add_function(self, name, block):
+        self.__functions[name] = block
     
     def create_dot_graph(self, outfile):
         """ Generating dot file representing the CFG
@@ -214,7 +242,9 @@ class Cfg(object):
             if isinstance(block, BasicBlock):
 
                 param = '<label> %s|' % (block.label if block.label else block.instructions[0].addr)
-                param += 'Live in: %s|' % (list(block.live_in) if block.live_in else "[]")    
+                param += 'Live in: %s|' % (list(block.live_in) if block.live_in else "[]")
+                if block.sync_point:
+                    param += 'SYNC Point: %s|' % block.sync_point
                 param += "{%s}" % block.get_dot_node()
                 param += '| Live out: %s' % (list(block.live_out) if block.live_out else "[]")
                 if block.condition:
@@ -259,7 +289,7 @@ class Cfg(object):
         """
         if not isinstance(program, Program):
             raise TypeError("Expect Program but got %s instead" % (program.__class__))
-        
+                
         print("Creating CFG")
         
         # Find the beginning of basic blocks. A basic block begin at the start
@@ -282,7 +312,9 @@ class Cfg(object):
         
         # Construct CFG basic blocks
         label_table = {} 
-
+        sync_point = None
+        call_targets = []
+        
         self.add_basic_block(StartBlock())
         for lead_inst in leader:
             next_leader = leader.index(lead_inst)+1 
@@ -302,36 +334,78 @@ class Cfg(object):
             block = BasicBlock(program.ast[ast_idx:ast_idx_next],)        
             self.add_basic_block(block)
             
+            call_targets.extend(block.get_call_targets())
+            
             if ast_idx > 0 and isinstance(program.ast[ast_idx-1], Label):
                 label = program.ast[ast_idx-1]
                 block.attach_label(label)
-                label_table[label.name] = block         
-        self.add_basic_block(EndBlock())
-                        
+                label_table[label.name] = block
+                if label.name == sync_point:
+                    sync_point = None
+            
+            if block.sync_point:
+                sync_point = block.sync_point
+            else:
+                block.sync_point = sync_point
+        
+        call_targets = list(set(call_targets))
+        if len(call_targets) > 0:    
+            self.__return_block = []
+                
+        self.__end_block = EndBlock()
+        self.add_basic_block(self.__end_block)
+                    
         self.__blocks[0].connect_taken(self.__blocks[1]) 
         # Connect blocks in CFG
         for block in self.__blocks[1:-1]:
+            if isinstance(block, EndBlock) or isinstance(block, ReturnBlock):
+                continue
             idx = self.__blocks.index(block)
             last_inst = block.instructions[-1]
             
+            if block.label and block.label.name in call_targets:
+                call_block = CallBlock()
+                call_block.connect_taken(block)
+                self.add_basic_block(call_block)
+                self.add_function(block.label.name, call_block)
+            
             if last_inst.opcode.name not in JUMP_OPS and idx < len(self.__blocks)-1:
-                block.connect_taken(self.__blocks[idx+1])
+                if last_inst.opcode.name == 'EXIT':
+                    block.connect_taken(self.__end_block)
+                elif last_inst.opcode.name == 'RET':
+                    ret_block = ReturnBlock()
+                    self.__return_block.append(ret_block)
+                    block.connect_taken(ret_block)
+                else:
+                    block.connect_taken(self.__blocks[idx+1])
             elif last_inst.opcode.name in JUMP_OPS:
                 if block.condition:
                     if block.condition.condition:
-                        block.connect_taken(label_table[last_inst.operands[0].name]) 
+                        if last_inst.opcode.name == 'SYNC':
+                            block.connect_taken(label_table[block.sync_point])
+                        else:
+                            block.connect_taken(label_table[last_inst.operands[0].name]) 
                         block.connect_not_taken(self.__blocks[idx+1] if idx < len(self.__blocks)-1 else None)
                     else:
-                        block.connect_not_taken(label_table[last_inst.operands[0].name]) 
+                        if last_inst.opcode.name == 'SYNC':
+                            block.connect_not_taken(label_table[block.sync_point])
+                        else:
+                            block.connect_not_taken(label_table[last_inst.operands[0].name]) 
                         block.connect_taken(self.__blocks[idx+1] if idx < len(self.__blocks)-1 else None)
                 else:
-                    block.connect_taken(label_table[last_inst.operands[0].name])
-        
+                    if last_inst.opcode.name == 'SYNC':
+                        block.connect_taken(label_table[block.sync_point])
+                    else:
+                        block.connect_taken(label_table[last_inst.operands[0].name])
+            for block in self.__return_block:
+                self.add_basic_block(block)
+                
     def analyze_liveness(self):
         """ Perform liveness analysis
         """
         # Generate a list of BasicBlock in reverse order
-        sorted_block = [self.__blocks[-1]] 
+        sorted_block = [self.__end_block]
+        sorted_blocks = [self.__end_block] 
         while len(sorted_block) > 0:
             curBlock = sorted_block.pop()
             # Tag node as visited
@@ -339,19 +413,22 @@ class Cfg(object):
             for pred in curBlock.pred:
                 if not getattr(pred, 'visited', False):
                     sorted_block.append(pred)
+                    sorted_blocks.append(pred)
         
         # Clean up visited tag
         for block in self.__blocks:
-            if not isinstance(block, StartBlock):
+            if not isinstance(block, StartBlock) and getattr(block, 'visited', None):
                 delattr(block, 'visited')
+        
+        pprint(sorted_blocks)
         
         # Compute live in and out
         converge = False
-        for node in sorted_block:
+        for node in sorted_blocks:
             node.live_in = set()
             node.live_out = set()
         while not converge:
-            for node in sorted_block:
+            for node in sorted_blocks:
                 if not isinstance(node, BasicBlock):
                     continue
                     
@@ -361,7 +438,7 @@ class Cfg(object):
                                 (node.not_taken.live_in if node.not_taken else set()) 
                 node.live_in = node.var_use | (node.live_out - node.var_def)
             converge = True
-            for node in sorted_block:
+            for node in sorted_blocks:
                 if not isinstance(node, BasicBlock):
                     continue
                 if node.old_live_in != node.live_in:
