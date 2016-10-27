@@ -78,7 +78,8 @@ def generate_spill_candidates(program, exclude_registers=[]):
             exclude_registers += list(itertools.chain(*dest_list))
     
     reg_remove = list(itertools.chain(*reg_64.union(reg_mem))) + exclude_registers
-    reg_candidates = sorted([ x for x in program.registers if x not in reg_remove], key=lambda x: int(x.replace('R','')))
+    reg_candidates = sorted(list(set([ x for x in program.registers if x not in reg_remove])), key=lambda x: int(x.replace('R','')))
+    
 
     interference_dict = analyse_register_interference(program, reg_candidates)
     access_dict = analyse_register_accesses(program, reg_candidates)
@@ -87,7 +88,7 @@ def generate_spill_candidates(program, exclude_registers=[]):
     #pprint(access_dict)
 
     reg_candidates = sorted(reg_candidates, key=lambda x: access_dict[x]['read'] +  access_dict[x]['write'])
-    #reg_candidates = sorted(reg_candidates, key=lambda x: len(interference_dict[x]))
+    reg_candidates = sorted(reg_candidates, key=lambda x: len(interference_dict[x]))
 
     return reg_candidates
     

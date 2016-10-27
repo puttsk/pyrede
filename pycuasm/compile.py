@@ -13,7 +13,8 @@ from pycuasm.compiler.parser import sass_parser
 from pycuasm.compiler.hir import *
 from pycuasm.compiler.cfg import *
 from pycuasm.compiler.analysis import *
-from pycuasm.compiler.transform import * 
+from pycuasm.compiler.transform import *
+from pycuasm.compiler.optimization import *  
 
 from pycuasm.tool import *
 
@@ -49,10 +50,6 @@ def compile(args):
     program.set_header(sass.header)
     
     print("Register usage: %s" % sorted(program.registers, key=lambda x: int(x.replace('R',''))))
-    #cfg = Cfg(program)
-    #cfg.create_dot_graph("cfg.dot")
-    
-    #cfd_register_sweep(program, size=2)
     
     if args.spill_register:
         print("[REG_SPILL] Spilling %d registers to shared memory. Threadblock Size: %d" % (args.spill_register, args.thread_block_size))
@@ -131,11 +128,16 @@ def compile(args):
                 spilled_count = spilled_count + 2 
         
         print("[REG_SPILL] Spilled %d registers to shared memory." % (spilled_count))
-        print("[REG_SPILL] %d %d %d" % (spill_register_id, spill_register_64_id, spill_register_addr_id))
+        
+        remove_redundant_spill_instruction(program, Register("R%d" % spill_register_addr_id))
+        rearrange_spill_instruction(program, Register("R%d" % spill_register_id) ,Register("R%d" % spill_register_addr_id)) 
         
     if not args.no_register_relocation:
         relocate_registers(program)
-        
+    
+    cfg = Cfg(program)
+    cfg.create_dot_graph("cfg.dot")
+    
     program.save(args.output)
     return
     

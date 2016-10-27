@@ -5,6 +5,35 @@ from pprint import pprint
 from pycuasm.compiler.hir import *
 from pycuasm.compiler.analysis import *
 
+class BarrierTracker(object):
+    def __init__(self):
+        # Unset all barrier to
+        # '-' : unset
+        # 'r' : read barrier
+        # 'w' : write barrier 
+        self.barriers = ['-', '-', '-', '-', '-', '-']
+
+    def reset(self):
+        self.barriers = ['-', '-', '-', '-', '-', '-']
+        
+    def update_flags(self, flags):
+        if flags.wait_barrier != 0:
+            for i in range(6):
+                if flags.wait_barrier & 2**i != 0:
+                    self.barriers[i] = '-'
+    
+        if flags.read_barrier != 0:
+            self.barriers[flags.read_barrier-1] = 'r'
+            
+        if flags.write_barrier != 0:
+            self.barriers[flags.write_barrier-1] = 'w'
+    
+    def get_available_flags(self, mode):
+        free_barrier = self.barriers.index('-')
+        self.barriers[free_barrier] = mode
+        
+        return free_barrier+1
+
 def relocate_registers(program):
     print("[REG_RELOC] Relocating registers.")
     program_regs = sorted(program.registers, key=lambda x: int(x.replace('R','')))
@@ -133,7 +162,6 @@ def spill_register_to_shared(
             thread_block_size (int): Size of thread block  
     """
     # TODO: Find free barrier for LDS Instruction
-    print("[REG_SPILL] Replacing %s with shared memory %s[%s] (TB:%d Offset:%d)" % (target_register,spill_register, spill_register_addr, thread_block_size,program.shared_size ))
     
     is_2d_thread_block = False
     
@@ -198,38 +226,14 @@ def spill_register_to_shared(
 
             program.ast.insert(1, tid_x_inst)
             program.ast.insert(2, base_addr_inst)
-
-        '''
-        # Find register containing thread id
-        for inst in program.ast:
-            if not isinstance(inst, Instruction):
-                continue
-            if inst.opcode.name == 'S2R':
-                # Look for S2R R19, SR_TID.X instruction.
-                if inst.operands[0].name == 'SR_TID' and 'X' in inst.operands[0].extension:
-                    tid_reg = inst.dest
-                    tid_inst = inst
-                    tid_inst_copy = copy.deepcopy(inst)
-                    break
-        
-        # Compute wait flag
-        wait_flag = 1 << (tid_inst.flags.write_barrier-1)
-        tid_inst_copy.flags.stall = tid_inst.flags.stall + 1
-        #tid_inst.flags.stall = tid_inst.flags.stall + 1
-        # Compute base address for spilled register
-        base_addr_inst = Instruction(Flags(hex(wait_flag),'-','-','-','6'), 
-            Opcode('SHL'), 
-            operands=[spill_register_addr, tid_reg, 0x02])
-        #program.ast.insert(program.ast.index(tid_inst) + 1, base_addr_inst)
-        program.ast.insert(1, tid_inst_copy)
-        program.ast.insert(2, base_addr_inst)
-        '''
     
     # Assign the spilled register Identifier
     spill_reg_id = program.shared_spill_count
     spill_offset = spill_reg_id * thread_block_size * 4 + program.shared_size
     program.shared_spill_count += 1
-        
+    
+    print("[REG_SPILL] Replacing %s with shared memory %s[%s+%d] (TB:%d Offset:%d)" % (target_register,spill_register, spill_register_addr, spill_offset, thread_block_size,program.shared_size ))
+    
     load_shr_inst = SpillLoadInstruction(Flags('--','1','2','-','6'), 
                         Opcode('LDS'),
                         operands=[spill_register, Pointer(spill_register_addr, spill_offset),
@@ -244,12 +248,18 @@ def spill_register_to_shared(
     w_count = 0
     r_count = 0
     
-    for inst in [x for x in program.ast if isinstance(x, Instruction)]:
+    barrier_tracker = BarrierTracker()
+    
+    for inst in program.ast:
         # If instruction contain spilled_register, rename the spilled_register to spill_register.
         # If the instruction read data from the spilled_register, load data in the shared memory 
         # to spill_register just before the instruction. 
         # If the instruction write data to the spilled_register, store data from spill_register 
         # to shared memory right after the instruction.
+        if isinstance(inst, Label):
+            barrier_tracker.reset()
+            continue
+        
         inst_idx = program.ast.index(inst)
         prev_idx = inst_idx-1
         prev_inst = None
@@ -267,8 +277,10 @@ def spill_register_to_shared(
                     # Load data from shared memory
                     op.register.rename(spill_register)
                     # Set the instruction that read still register to wait for shared memory read 
-                    inst.flags.wait_barrier = inst.flags.wait_barrier | 0x3
                     shared_load_inst = copy.deepcopy(load_shr_inst)
+                    shared_load_inst.flags.read_barrier = barrier_tracker.get_available_flags('r')
+                    shared_load_inst.flags.write_barrier = barrier_tracker.get_available_flags('w')
+                    inst.flags.wait_barrier = inst.flags.wait_barrier | (1 << (shared_load_inst.flags.read_barrier-1) | 1 << (shared_load_inst.flags.write_barrier-1))
                     if isinstance(prev_inst, SpillStoreInstruction):
                          shared_load_inst.flags.wait_barrier = shared_load_inst.flags.wait_barrier | 0x8 
                     program.ast.insert(program.ast.index(inst), shared_load_inst)
@@ -279,8 +291,10 @@ def spill_register_to_shared(
                     # Read access
                     inst.operands[inst.operands.index(op)].rename(spill_register)
                     # Set the instruction that read spill register to wait for shared memory read
-                    inst.flags.wait_barrier = inst.flags.wait_barrier | 0x3
                     shared_load_inst = copy.deepcopy(load_shr_inst)
+                    shared_load_inst.flags.read_barrier = barrier_tracker.get_available_flags('r')
+                    shared_load_inst.flags.write_barrier = barrier_tracker.get_available_flags('w')
+                    inst.flags.wait_barrier = inst.flags.wait_barrier | (1 << (shared_load_inst.flags.read_barrier-1) | 1 << (shared_load_inst.flags.write_barrier-1))
                     if isinstance(prev_inst, SpillStoreInstruction):
                          shared_load_inst.flags.wait_barrier = shared_load_inst.flags.wait_barrier | 0x8 
                     program.ast.insert(program.ast.index(inst), shared_load_inst)
@@ -291,8 +305,10 @@ def spill_register_to_shared(
                 r_count = r_count + 1
                 inst.dest.register.rename(spill_register)
                 # Set the instruction that read spill register to wait for shared memory read
-                inst.flags.wait_barrier = inst.flags.wait_barrier | 0x3
                 shared_load_inst = copy.deepcopy(load_shr_inst)
+                shared_load_inst.flags.read_barrier = barrier_tracker.get_available_flags('r')
+                shared_load_inst.flags.write_barrier = barrier_tracker.get_available_flags('w')
+                inst.flags.wait_barrier = inst.flags.wait_barrier | (1 << (shared_load_inst.flags.read_barrier-1) | 1 << (shared_load_inst.flags.write_barrier-1))
                 if isinstance(prev_inst, SpillStoreInstruction):
                         shared_load_inst.flags.wait_barrier = shared_load_inst.flags.wait_barrier | 0x8 
                 program.ast.insert(program.ast.index(inst), shared_load_inst)
@@ -311,20 +327,25 @@ def spill_register_to_shared(
                     inst.flags.stall = inst.flags.stall + 1
                 else:
                     if(inst.opcode.grammar.type == 'gmem' or inst.opcode.grammar.type == 'smem'):
-                        inst.flags.write_barrier = 6
+                        inst.flags.write_barrier = barrier_tracker.get_available_flags('w')
                         st_inst.flags.wait_barrier = st_inst.flags.wait_barrier |( 1 << (inst.flags.write_barrier-1))
                     elif (inst.opcode.name in ['RRO', 'MUFU']):
                         if inst.flags.write_barrier == 0:
-                            inst.flags.write_barrier = 6
+                            inst.flags.write_barrier = barrier_tracker.get_available_flags('w')
                         st_inst.flags.wait_barrier = st_inst.flags.wait_barrier |( 1 << (inst.flags.write_barrier-1))
-                    inst.flags.stall = 13 
+                    if inst.flags.stall < 15:
+                        inst.flags.stall += 1
+                        inst.flags.stall = 13 
                     inst.flags.yield_hint = False
+                st_inst.flags.read_barrier = barrier_tracker.get_available_flags('r')
                 program.ast.insert(program.ast.index(inst) + 1, st_inst)
                 # Set wait flag of the next instruction to wait for store instruction to finish
                 inst_next = program.ast[program.ast.index(st_inst) + 1] 
                 if isinstance(inst_next, Instruction):
-                    inst_next.flags.wait_barrier = inst_next.flags.wait_barrier | 8 
-                  
+                    inst_next.flags.wait_barrier = inst_next.flags.wait_barrier | (1 << (st_inst.flags.read_barrier -1))
+        
+        barrier_tracker.update_flags(inst.flags)
+                                   
     print("[REG_SPILL] Read accesses: %d Write accesses: %d" % (r_count, w_count))   
     program.update()
     

@@ -173,6 +173,8 @@ class Opcode(object):
         
         if self.grammar.is_64:
             self.op_bit = 64 
+        if 'U64' in self.extension:
+            self.op_bit = 64
 
     def __str__(self):
         return self.full 
