@@ -64,16 +64,13 @@ class EndBlock(Block):
         return "<End>"
 
 class FunctionBlock(Block):
-    def __init__(self):
-        super().__init__()
-        self.input = []
-        self.output = []        
-
     def __repr__(self):
         return "<Function Call>"
     
     def update(self):
         pass
+
+
         
 class ReturnBlock(Block):
     def __repr__(self):
@@ -158,7 +155,6 @@ class BasicBlock(Block):
             reg_write_map[k] = []
         
         for inst in self.instructions:
-            pprint(inst)
             for operand in inst.operands:
                 op = operand
                 if isinstance(op, Pointer):
@@ -170,9 +166,6 @@ class BasicBlock(Block):
                 
             if inst.opcode.reg_store and isinstance(inst.dest, Register):
                 reg_write_map[inst.dest].append(inst.addr)
-        
-        pprint(reg_read_map)
-        pprint(reg_write_map)
         
         for reg in reg_read_map.keys():
             # First read is before first write
@@ -199,6 +192,10 @@ class BasicBlock(Block):
     def attach_label(self, label):
         self.label = label
     
+class CallBlock(BasicBlock):
+    def update(self):
+        pass
+
 class Cfg(object):
     """ Control flow graph
     """
@@ -208,6 +205,7 @@ class Cfg(object):
                 program: A program object generated from parser
         """
         self.__blocks = []
+        self.__return_block = None
         self.__functions = {}
         if program:
             self.update(program)
@@ -239,7 +237,6 @@ class Cfg(object):
         for block in self.__blocks:
             node = "block%d " % self.__blocks.index(block)
             if isinstance(block, BasicBlock):
-
                 param = '<label> %s|' % (block.label if block.label else hex(block.instructions[0].addr))
                 param += 'USE: %s|' % (list(block.var_use) if block.var_use else "[]")
                 if block.sync_point:
@@ -249,7 +246,7 @@ class Cfg(object):
                 if block.condition:
                     param += "|<branch> %s" % block.instructions[-1].opcode
                 
-                node += '[shape=record, label="{%s}"]' % param;
+                node += '[shape=record, label="{%s}", %s]' % (param, "" if not isinstance(block, CallBlock) else "color=red");
             else:
                 node += '[labeljust=l, shape=rectangle, label="%s"]' % str(block)
             nodes += node + ";\n"
@@ -342,7 +339,11 @@ class Cfg(object):
             
             # Create a basic block containing instructions between the current 
             # leader and the next leader
-            block = BasicBlock(program.ast[ast_idx:ast_idx_next],)        
+            block = None
+            if(len(program.ast[ast_idx:ast_idx_next]) == 1) and program.ast[ast_idx].opcode.name in CALL_OPS:
+                block = CallBlock(program.ast[ast_idx:ast_idx_next],)
+            else:
+                block = BasicBlock(program.ast[ast_idx:ast_idx_next],)        
             self.add_basic_block(block)
                         
             if ast_idx > 0 and isinstance(program.ast[ast_idx-1], Label):
@@ -356,9 +357,8 @@ class Cfg(object):
                 sync_point = block.sync_point
             else:
                 block.sync_point = sync_point
-        
-        if len(call_targets) > 0:    
-            self.__return_block = []
+            
+        self.__return_block = []
                 
         self.__end_block = EndBlock()
         self.add_basic_block(self.__end_block)
