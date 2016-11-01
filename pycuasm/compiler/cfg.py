@@ -24,7 +24,12 @@ class Block(object):
         self.__not_taken = not_taken
         self.__pred = []
         self.condition = None
-                
+        
+        self.var_use = set()
+        self.var_def = set()
+        self.live_in = set()
+        self.live_out = set()
+        
     @property    
     def taken(self):
         return self.__taken
@@ -58,7 +63,7 @@ class EndBlock(Block):
     def __repr__(self):
         return "<End>"
 
-class CallBlock(Block):
+class FunctionBlock(Block):
     def __init__(self):
         super().__init__()
         self.input = []
@@ -88,11 +93,6 @@ class BasicBlock(Block):
         self.label = label
         self.condition = self.instructions[-1].condition
         self.sync_point = None
-        
-        self.var_use = set()
-        self.var_def = set()
-        self.live_in = set()
-        self.live_out = set()
         
         registers = []
         pointers = []
@@ -156,8 +156,9 @@ class BasicBlock(Block):
         reg_write_map = dict.fromkeys(self.registers)
         for k in reg_write_map:
             reg_write_map[k] = []
-            
+        
         for inst in self.instructions:
+            pprint(inst)
             for operand in inst.operands:
                 op = operand
                 if isinstance(op, Pointer):
@@ -170,20 +171,19 @@ class BasicBlock(Block):
             if inst.opcode.reg_store and isinstance(inst.dest, Register):
                 reg_write_map[inst.dest].append(inst.addr)
         
+        pprint(reg_read_map)
+        pprint(reg_write_map)
+        
         for reg in reg_read_map.keys():
             # First read is before first write
             if reg_read_map[reg] and reg_write_map[reg] and reg_read_map[reg][0] <= reg_write_map[reg][0]:
                 self.var_use.add(reg)
+                
+            if reg_read_map[reg] and len(reg_write_map[reg]) == 0:
+                self.var_use.add(reg)
             
             if reg_write_map[reg] and len(reg_write_map[reg]) > 0:
                 self.var_def.add(reg)
-    
-    def get_call_targets(self):
-        call_targets = []
-        for inst in self.instructions:
-            if inst.opcode.name in CALL_OPS:
-                call_targets.append(inst.operands[0].name)
-        return call_targets
     
     def get_dot_node(self):
         repr = ''
@@ -210,8 +210,7 @@ class Cfg(object):
         self.__blocks = []
         self.__functions = {}
         if program:
-            self.update_cfg(program)    
-            self.analyze_liveness();
+            self.update(program)
     
     def __repr__(self):
         repr = ""
@@ -241,12 +240,12 @@ class Cfg(object):
             node = "block%d " % self.__blocks.index(block)
             if isinstance(block, BasicBlock):
 
-                param = '<label> %s|' % (block.label if block.label else block.instructions[0].addr)
-                param += 'Live in: %s|' % (list(block.live_in) if block.live_in else "[]")
+                param = '<label> %s|' % (block.label if block.label else hex(block.instructions[0].addr))
+                param += 'USE: %s|' % (list(block.var_use) if block.var_use else "[]")
                 if block.sync_point:
                     param += 'SYNC Point: %s|' % block.sync_point
                 param += "{%s}" % block.get_dot_node()
-                param += '| Live out: %s' % (list(block.live_out) if block.live_out else "[]")
+                param += '| DEF: %s' % (list(block.var_def) if block.var_def else "[]")
                 if block.condition:
                     param += "|<branch> %s" % block.instructions[-1].opcode
                 
@@ -281,7 +280,7 @@ class Cfg(object):
         f.write(dot)
         f.close()
         
-    def update_cfg(self, program):
+    def update(self, program):
         """ Building CFG for a program
             
             Args:
@@ -294,26 +293,38 @@ class Cfg(object):
         
         # Find the beginning of basic blocks. A basic block begin at the start
         # of a program, after a label, or a new predicate is found. 
+        call_targets = []
         leader = []
         read_leader = True
+        
         for inst in program.ast:
             if isinstance(inst, Instruction) and read_leader:
                 # Mark the instruction as the beginning of a new basic block 
                 leader.append(inst)
                 prev_condition = inst.condition
-                read_leader = False
-                
-            if isinstance(inst, Instruction) and not read_leader:             
                 if inst.opcode.name in JUMP_OPS:
                     read_leader = True
+                elif inst.opcode.name in CALL_OPS:
+                    read_leader = True
+                    call_targets.append(inst.operands[0].name)
+                else:
+                    read_leader = False               
+            elif isinstance(inst, Instruction) and not read_leader:             
+                if inst.opcode.name in JUMP_OPS:
+                    read_leader = True
+                if inst.opcode.name in CALL_OPS:
+                    leader.append(inst)
+                    read_leader = True
+                    call_targets.append(inst.operands[0].name)
                     
-            if isinstance(inst, Label):
+            elif isinstance(inst, Label):
                 read_leader = True
+        
+        call_targets = list(set(call_targets))
         
         # Construct CFG basic blocks
         label_table = {} 
         sync_point = None
-        call_targets = []
         
         self.add_basic_block(StartBlock())
         for lead_inst in leader:
@@ -333,9 +344,7 @@ class Cfg(object):
             # leader and the next leader
             block = BasicBlock(program.ast[ast_idx:ast_idx_next],)        
             self.add_basic_block(block)
-            
-            call_targets.extend(block.get_call_targets())
-            
+                        
             if ast_idx > 0 and isinstance(program.ast[ast_idx-1], Label):
                 label = program.ast[ast_idx-1]
                 block.attach_label(label)
@@ -348,7 +357,6 @@ class Cfg(object):
             else:
                 block.sync_point = sync_point
         
-        call_targets = list(set(call_targets))
         if len(call_targets) > 0:    
             self.__return_block = []
                 
@@ -364,7 +372,7 @@ class Cfg(object):
             last_inst = block.instructions[-1]
             
             if block.label and block.label.name in call_targets:
-                call_block = CallBlock()
+                call_block = FunctionBlock()
                 call_block.connect_taken(block)
                 self.add_basic_block(call_block)
                 self.add_function(block.label.name, call_block)
@@ -403,43 +411,45 @@ class Cfg(object):
     def analyze_liveness(self):
         """ Perform liveness analysis
         """
-        # Generate a list of BasicBlock in reverse order
-        sorted_block = [self.__end_block]
-        sorted_blocks = [self.__end_block] 
-        while len(sorted_block) > 0:
-            curBlock = sorted_block.pop()
-            # Tag node as visited
-            setattr(curBlock, 'visited',True)
-            for pred in curBlock.pred:
-                if not getattr(pred, 'visited', False):
-                    sorted_block.append(pred)
-                    sorted_blocks.append(pred)
         
-        # Clean up visited tag
-        for block in self.__blocks:
-            if not isinstance(block, StartBlock) and getattr(block, 'visited', None):
-                delattr(block, 'visited')
+        end_blocks = self.__return_block + [self.__end_block]
         
-        pprint(sorted_blocks)
-        
-        # Compute live in and out
-        converge = False
-        for node in sorted_blocks:
-            node.live_in = set()
-            node.live_out = set()
-        while not converge:
+        for block in end_blocks:
+            # Generate a list of BasicBlock in reverse order
+            traversed_block = [block]
+            sorted_blocks = [block] 
+            while len(traversed_block) > 0:
+                curBlock = traversed_block.pop()
+                # Tag node as visited
+                setattr(curBlock, 'visited',True)
+                for pred in curBlock.pred:
+                    if not getattr(pred, 'visited', False):
+                        traversed_block.append(pred)
+                        sorted_blocks.append(pred)
+            
+            # Clean up visited tag
+            for node in self.__blocks:
+                if not isinstance(node, StartBlock) and getattr(node, 'visited', None):
+                    delattr(node, 'visited')        
+            
+            # Compute live in and out
+            converge = False
             for node in sorted_blocks:
-                if not isinstance(node, BasicBlock):
-                    continue
-                    
-                setattr(node, 'old_live_in', node.live_in.copy())
-                setattr(node, 'old_live_out', node.live_out.copy())
-                node.live_out = (node.taken.live_in if node.taken else set()) | \
-                                (node.not_taken.live_in if node.not_taken else set()) 
-                node.live_in = node.var_use | (node.live_out - node.var_def)
-            converge = True
-            for node in sorted_blocks:
-                if not isinstance(node, BasicBlock):
-                    continue
-                if node.old_live_in != node.live_in:
-                    converge = False    
+                node.live_in = set()
+                node.live_out = set()
+            
+            if isinstance(block, ReturnBlock):
+                for node in sorted_blocks:
+                    block.var_use |= node.var_def           
+
+            while not converge:
+                for node in sorted_blocks:
+                    setattr(node, 'old_live_in', node.live_in.copy())
+                    setattr(node, 'old_live_out', node.live_out.copy())
+                    node.live_out = (node.taken.live_in if node.taken else set()) | \
+                                    (node.not_taken.live_in if node.not_taken else set()) 
+                    node.live_in = node.var_use | (node.live_out - node.var_def)
+                converge = True
+                for node in sorted_blocks:
+                    if node.old_live_in != node.live_in:
+                        converge = False    
