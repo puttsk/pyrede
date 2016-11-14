@@ -34,6 +34,175 @@ class BarrierTracker(object):
         
         return free_barrier+1
 
+class RelocatableRegister(object):
+    def __init__(self, lead_register, bits=32 ):
+        self.lead_register = lead_register
+        self.registers = []     
+        self.relocated_register = []    
+        self.bits = bits
+        self.new_lead_register = None
+        self.new_registers = []
+
+        reg_id = lead_register.id
+        if self.bits > 32:
+            reg_count = int(self.bits / 32)
+            #if reg_id % reg_count != 0:
+            #    reg_id = reg_id - (reg_id % reg_count)
+            for r in range(0, reg_count):
+                self.registers.append(Register("R%d" % (reg_id+r)))
+        else:
+            self.registers.append(self.lead_register)
+    
+        self.lead_register = self.registers[0]
+    
+    def __repr__(self):
+        repr_str =  "%3d-bit Register %s: %s" % (self.bits, self.lead_register, self.registers)
+        if self.new_lead_register:
+            repr_str +=  " -> Register %s: %s" % (self.new_lead_register, self.new_registers)
+        return repr_str
+    
+    def __hash__(self):
+        return hash(frozenset(self.registers))
+    
+    def __eq__(self, other):
+        if not isinstance(other, RelocatableRegister):
+            return False
+        
+        if len(self.registers) != len(other.registers):
+            return False
+        
+        for i in range(len(self.registers)):
+            if self.registers[i] != other.registers[i]:
+                return False
+        return True
+    
+    def move(self, new_register):
+        self.new_lead_register = new_register
+        if self.bits > 32:
+            reg_count = int(self.bits / 32)
+            if new_register.id % reg_count != 0:
+                new_register.id = new_register.id - (new_register.id % reg_count)
+            for r in range(0, reg_count):
+                self.new_registers.append(Register("R%d" % (new_register.id+r)))
+        else:
+            self.new_registers.append(self.new_lead_register)
+
+
+def relocate_registers_new(program):
+    print("[REG_RELOC] Relocating registers.")
+    
+    relocation_space_size = int(program.registers[-1].replace('R','')) + 1
+    relocation_space = [None] * relocation_space_size
+    
+    # Creating a list of non 32bit register
+    # 64-bit integer and 64-bit floating point use different rules.
+    for inst in [x for x in program.ast if isinstance(x, Instruction)]:
+        # Detecting 64-bit accesses
+        if (inst.opcode.type == 'x32' and 
+            inst.opcode.integer_inst and 
+            inst.opcode.reg_store and 
+            inst.dest):
+            if inst.dest.carry_bit:
+                opcode = inst.opcode
+                inst_pos = program.ast.index(inst)
+                
+                for next_inst in [x for x in program.ast[inst_pos:] if isinstance(x, Instruction)]:
+                    if next_inst.opcode.use_carry_bit:
+                        relocate_reg = RelocatableRegister(inst.dest, bits=64) 
+                        for reg in relocate_reg.registers:
+                            relocation_space[reg.id] = relocate_reg      
+                        #reg_set.add(next_inst.dest.name)
+                        break
+        
+        if (inst.opcode.op_bit != 32):
+            reg_list = [x for x in inst.operands if isinstance(x, Register)]
+            if inst.dest and isinstance(inst.dest, Register):
+                reg_list.append(inst.dest)
+            
+            for reg in reg_list:
+                relocate_reg = RelocatableRegister(reg, bits=inst.opcode.op_bit)
+                for reg in relocate_reg.registers:
+                    relocation_space[reg.id] = relocate_reg
+    
+    for reg in program.registers:
+        reg_id = int(reg.replace('R',''))
+        if relocation_space[reg_id] == None:    
+            relocation_space[reg_id] = RelocatableRegister(Register(reg))
+
+    empty_location_list = []
+    for loc in range(relocation_space_size):
+        if not relocation_space[loc]:
+            empty_location_list.append(loc)
+    
+    #pprint(relocation_space)
+
+    empty_idx = 0
+    pprint(empty_location_list)
+    while len(empty_location_list) > 0:
+        empty_loc = empty_location_list.pop(0)
+        cont_loc_count = 1
+        while empty_location_list and empty_location_list[0] - empty_loc == cont_loc_count:
+            empty_location_list.pop(0)
+            cont_loc_count += 1
+        
+        while cont_loc_count > 0:
+            # Get next register 
+            next_reg = None
+            next_reg_loc = empty_loc 
+            while not next_reg and next_reg_loc < len(relocation_space)-1:
+                next_reg_loc = next_reg_loc + 1
+                next_reg = relocation_space[next_reg_loc]
+            if not next_reg:
+                # End of list
+                break
+
+            if empty_loc % 2 == 1 and next_reg.bits > 32:
+                # The available register is odd register
+                # Only 32-bit register is allowed here
+                # Find 32-bit register from the back of reglocation_space
+                for i in reversed(range(len(relocation_space))):
+                    reg_reloc = relocation_space[i]
+                    if reg_reloc and reg_reloc.bits == 32 and i > empty_loc:
+                        relocation_space[empty_loc] = relocation_space[i]
+                        relocation_space[i] = None
+                        print("Move R%d to R%d"  % (i, empty_loc))
+                        relocation_space[empty_loc].move(Register('R%d' % empty_loc))
+                        break
+                cont_loc_count = cont_loc_count - 1
+                # Move to next location
+                empty_loc = empty_loc + 1
+            else:
+                # The available register is even register
+                # Check if the next register is movable
+                required_reg_count = int(next_reg.bits / 32)
+                if empty_loc % required_reg_count == 0:
+                    # The register is movable. Move register to empty location
+                    for i in range(required_reg_count):
+                        relocation_space[empty_loc + i] = relocation_space[next_reg_loc + i]
+                        relocation_space[next_reg_loc + i] = None
+                    print("Move %d-bit R%d to R%d"  % (next_reg.bits, next_reg_loc, empty_loc))
+                    relocation_space[empty_loc].move(Register('R%d' % empty_loc))  
+                    # Move to next new empty space without reducing the size
+                    empty_loc = empty_loc + required_reg_count
+                else: 
+                    # TODO: The register is not movable
+                    raise RuntimeError('Register %d is not movable' % empty_loc) 
+            
+            if empty_location_list and empty_loc + cont_loc_count >= empty_location_list[0]:
+                # The current empty space merge with the next one.
+                # Update the size of empty space 
+                while empty_location_list and empty_location_list[0] - empty_loc == cont_loc_count:
+                    empty_location_list.pop(0)
+                    cont_loc_count += 1
+                #pprint((empty_loc, cont_loc_count))
+            #pprint(relocation_space)
+            #input("Press Enter to continue...")
+    pprint(relocation_space)
+    for reg_reloc in relocation_space:
+        if reg_reloc and reg_reloc.new_lead_register:
+            for i in range(len(reg_reloc.new_registers)):
+                rename_register(program, reg_reloc.registers[i], reg_reloc.new_registers[i])
+
 def relocate_registers(program):
     print("[REG_RELOC] Relocating registers.")
     program_regs = sorted(program.registers, key=lambda x: int(x.replace('R','')))

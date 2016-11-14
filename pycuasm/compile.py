@@ -48,8 +48,10 @@ def compile(args):
     program = sass_parser.parse(sass.sass_raw, lexer=sass_lexer)
     program.set_constants(sass.constants)
     program.set_header(sass.header)
-    
+        
     print("Register usage: %s" % sorted(program.registers, key=lambda x: int(x.replace('R',''))))
+    
+    cfg = Cfg(program)
     
     if args.spill_register:
         print("[REG_SPILL] Spilling %d registers to shared memory. Threadblock Size: %d" % (args.spill_register, args.thread_block_size))
@@ -58,12 +60,15 @@ def compile(args):
         if args.exclude_registers:
             exclude_registers.append(args.exclude_registers)
         
-        reg_candidates = generate_spill_candidates(program, exclude_registers=exclude_registers)
+        reg_candidates = generate_spill_candidates_cfg(program, cfg, exclude_registers=exclude_registers)
+        cfg.create_dot_graph("cfg.dot")
+        #reg_candidates = generate_spill_candidates(program, exclude_registers=exclude_registers)
         skipped_candidates = []
         interference_dict = analyse_register_interference(program, reg_candidates)
         access_dict = analyse_register_accesses(program, reg_candidates)
+        
         pprint(reg_candidates)
-
+        
         last_reg = sorted(program.registers, key=lambda x: int(x.replace('R','')), reverse=True)[0]
         last_reg_id = int(last_reg.replace('R',''))
 
@@ -133,11 +138,9 @@ def compile(args):
         rearrange_spill_instruction(program, Register("R%d" % spill_register_id) ,Register("R%d" % spill_register_addr_id)) 
         
     if not args.no_register_relocation:
-        relocate_registers(program)
-    
-    cfg = Cfg(program)
-    cfg.create_dot_graph("cfg.dot")
-    
+        #relocate_registers(program)
+        relocate_registers_new(program)
+        
     program.save(args.output)
     return
     

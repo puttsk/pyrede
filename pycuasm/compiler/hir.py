@@ -60,7 +60,7 @@ class Program(object):
             else:
                 raise ValueError("Unknown IR Type: %s %s" % (inst.__class__, inst))
 
-        self.registers = registers
+        self.registers = sorted(registers, key= lambda x: int(x.replace('R','')))
     
     def save(self, outfile):
         f = open(outfile, 'w')
@@ -171,10 +171,25 @@ class Opcode(object):
 
         self.grammar = SASS_GRAMMARS[self.name]
         
+        # Setting operation bit
+        if self.name == 'XMAD':
+            self.op_bit = 16
+        
         if self.grammar.is_64:
             self.op_bit = 64 
-        if 'U64' in self.extension:
-            self.op_bit = 64
+        
+        for extension in self.extension:
+            if '64' in extension:            
+                self.op_bit = 64
+            elif '128' in extension:
+                self.op_bit = 128
+            elif '16' in extension:
+                self.op_bit = 16     
+
+            # TODO: This is a quick fix for shift.u64.hi
+            if 'U64' == extension and 'HI' in self.extension:
+                self.op_bit = 32
+                pprint(self)
 
     def __str__(self):
         return self.full 
@@ -288,10 +303,17 @@ class Register(object):
         
         self.carry_bit = 'CC' in self.extension
         self.offset = 0
-
+        
     @property
     def full(self):
         return "%s%s%s" % (self.name, '.' if self.extension else '', '.'.join(self.extension))
+
+    @property
+    def id(self):
+        if not self.is_special:
+            return int(self.name.replace('R',''))
+        else:
+            return -1
 
     def __hash__(self):
         return hash(self.name)
@@ -311,6 +333,8 @@ class Register(object):
         return self.full   
     
     def __eq__(self, other):
+        if isinstance(other, str):
+            return self.name == other
         if not isinstance(other, Register):
             return False
         return self.name == other.name

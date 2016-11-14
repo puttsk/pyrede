@@ -1,7 +1,10 @@
 import itertools
+import copy
+import math
 
 from pprint import pprint
 from pycuasm.compiler.hir import *
+from pycuasm.compiler.cfg import *
 
 def analyse_register_interference(program, register_list = None):
     if not register_list:
@@ -55,40 +58,16 @@ def analyse_register_accesses(program, register_list = None):
     
 def generate_spill_candidates(program, exclude_registers=[]):
     print("[ANA_SPILL] Generating spilled register candidates. Excluding registers: %s" % exclude_registers)
-    reg_64 = collect_64bit_registers(program)
-    #reg_mem =  collect_global_memory_access(program)
-    reg_mem = []
-    #pprint(reg_64)
+    reg_64 = collect_non_32bit_registers(program)
     
-    for inst in [x for x in program.ast if isinstance(x, Instruction)]:
-        if inst.opcode.op_bit > 32 and (inst.opcode.type == 'gmem' or inst.opcode.type == 'smem'):
-            # Handle multi-word load instruction e.g. LDG.E.128 R4 [R0], which load 4 32-bit words to R4, R5, R6, and R7
-            # TODO: Might need to implement this for 32-bit spilling as well
-            dest_list = []
-            #pprint(inst)
-            if "LD" in inst.opcode.name:
-                start_reg_id = int(inst.dest.name.replace('R',''))
-                for i in range (0, int(inst.opcode.op_bit/32), 2):
-                    dest_list.append(('R%d' % (start_reg_id + i), 'R%d' % (start_reg_id + i + 1)))
-            elif "ST" in inst.opcode.name:
-                start_reg_id = int(inst.operands[1].name.replace('R',''))
-                for i in range (0, int(inst.opcode.op_bit/32), 2):
-                    dest_list.append(('R%d' % (start_reg_id + i), 'R%d' % (start_reg_id + i + 1)))
-            #pprint(dest_list)
-            exclude_registers += list(itertools.chain(*dest_list))
-    
-    reg_remove = list(itertools.chain(*reg_64.union(reg_mem))) + exclude_registers
+    reg_remove = list(reg_64) + exclude_registers
     reg_candidates = sorted(list(set([ x for x in program.registers if x not in reg_remove])), key=lambda x: int(x.replace('R','')))
     
-
     interference_dict = analyse_register_interference(program, reg_candidates)
     access_dict = analyse_register_accesses(program, reg_candidates)
-    
-    #pprint(interference_dict)
-    #pprint(access_dict)
 
     reg_candidates = sorted(reg_candidates, key=lambda x: access_dict[x]['read'] +  access_dict[x]['write'])
-    reg_candidates = sorted(reg_candidates, key=lambda x: len(interference_dict[x]))
+    #reg_candidates = sorted(reg_candidates, key=lambda x: len(interference_dict[x]))
 
     return reg_candidates
     
@@ -145,6 +124,7 @@ def generate_64bit_spill_candidates(program, exclude_registers=[]):
 
     return reg_candidates
 
+
 def collect_64bit_registers(program):
     reg64_dict = {}
     registers_dict = {}
@@ -175,7 +155,7 @@ def collect_64bit_registers(program):
             if inst.reg_store and inst.dest:
                 reg_id = int(inst.dest.name.replace('R',''))
                 reg64.add(("R%d" % reg_id, "R%d" % (reg_id+1)))
-                
+             
     return reg64
     
 def collect_global_memory_access(program):
@@ -198,3 +178,195 @@ def collect_global_memory_access(program):
                     
                 mem_reg.add((main_reg.name, couple_reg))
     return mem_reg
+
+
+def __update_loop_reg_access(cfg, loop_begin, loop_end, update_factor = 10):
+    traverse_order = Cfg.generate_breadth_first_order(loop_begin, loop_end)
+    
+    if getattr(loop_begin, 'visited_source', False):
+        if loop_end in loop_begin.visited_source:
+            return
+        else:
+            loop_begin.visited_source.append(loop_end)
+    else:
+        setattr(loop_begin, 'visited_source', [loop_end])
+    
+    for block in traverse_order:    
+        if getattr(block, 'register_access', False):
+            for k in block.register_access:
+                block.register_access[k] *= update_factor
+
+                            
+def __get_function_reg_access(cfg, function_block):
+
+    if getattr(function_block, 'register_access', False):
+        return copy.copy(function_block.register_access)
+        
+    traverse_order = Cfg.generate_breadth_first_order(function_block)
+    traverse_id = Cfg.get_traverse_id()
+    visit_tag = 'visited_level_' + str(traverse_id)
+        
+    reg_access = {}
+        
+    for block in traverse_order:
+        pred_level = max([0] + [getattr(x, visit_tag, 0) for x in block.pred])
+        cur_level = pred_level + 1
+        setattr(block, visit_tag, cur_level)
+        
+        block_reg_access = {}
+        
+        if not isinstance(block, BasicBlock):
+            continue
+        elif isinstance(block, CallBlock):
+            block_reg_access = __get_function_reg_access(cfg, cfg.function_blocks[block.target_function])
+        else:            
+            block_reg_access = block.register_access
+            
+        for k in block_reg_access:
+            if k not in reg_access.keys():
+                reg_access[k] = block_reg_access[k]
+            else:
+                reg_access[k] += block_reg_access[k]
+
+        if getattr(block.taken, visit_tag, cur_level) < cur_level:
+            __update_loop_reg_access(cfg, block.taken, block)
+    
+        if getattr(block.not_taken, visit_tag, cur_level) < cur_level:
+            __update_loop_reg_access(cfg, block.not_taken, block)
+    
+    for block in traverse_order:
+        delattr(block, visit_tag)
+    
+    setattr(function_block, 'register_access', reg_access)
+    return reg_access
+    
+def generate_spill_candidates_cfg(program, cfg, exclude_registers=[]):
+    # Update all read/write accesses of each register in each BasicBlock
+    for block in cfg.blocks:
+        if not isinstance(block, BasicBlock):
+            continue
+            
+        reg_read_map = dict.fromkeys(block.registers)
+        for k in reg_read_map:
+            reg_read_map[k] = 0           
+        
+        reg_write_map = dict.fromkeys(block.registers)
+        for k in reg_write_map:
+            reg_write_map[k] = 0
+        
+        reg_access_map = dict.fromkeys(block.registers)
+        
+        for inst in block.instructions:
+            for operand in inst.operands:
+                op = operand
+                if isinstance(op, Pointer):
+                    op = op.register
+                if not isinstance(op, Register) or op.is_special:
+                    continue
+                
+                reg_read_map[op] += 1
+                
+            if inst.opcode.reg_store and isinstance(inst.dest, Register):
+                reg_write_map[inst.dest] += 1
+        
+        for k in reg_access_map:
+            reg_access_map[k] = reg_read_map[k] + reg_write_map[k]
+        
+        setattr(block, 'register_reads', reg_read_map)
+        setattr(block, 'register_writes', reg_write_map)
+        setattr(block, 'register_access', reg_access_map)
+        
+    # Summarize register accesses in each function
+    # Assume that there is no calling loop, e.g. A calls B and B calls A
+    
+    for function in cfg.function_blocks:
+        __get_function_reg_access(cfg, cfg.function_blocks[function])
+        
+    traverse_order = Cfg.generate_breadth_first_order(cfg.blocks[0])
+    traverse_id = Cfg.get_traverse_id()
+    visit_tag = 'visited_level_' + str(traverse_id)
+    
+    for block in traverse_order:
+        if isinstance(block, CallBlock):
+            setattr(block, 'register_access', __get_function_reg_access(cfg, cfg.function_blocks[block.target_function]))
+    
+    for block in traverse_order:
+        pred_level = max([0] + [getattr(x, visit_tag, 0) for x in block.pred])
+        cur_level = pred_level + 1        
+        setattr(block, visit_tag, cur_level)
+    
+        if getattr(block.taken, visit_tag, cur_level) < cur_level:
+            __update_loop_reg_access(cfg, block.taken, block)
+    
+        if getattr(block.not_taken, visit_tag, cur_level) < cur_level:
+            __update_loop_reg_access(cfg, block.not_taken, block)
+    
+    for block in traverse_order:
+        delattr(block, visit_tag)
+        
+    reg_access = {}
+        
+    for block in traverse_order:
+        if getattr(block, 'register_access', False):
+            block_reg_access = block.register_access
+                
+            for k in block_reg_access:
+                if k not in reg_access.keys():
+                    reg_access[k] = block_reg_access[k]
+                    if k == 'R32':
+                        pprint(reg_access[k])
+                else:
+                    reg_access[k] += block_reg_access[k]
+                    if k == 'R32':
+                        pprint(reg_access[k])
+    
+    non_32_registers = collect_non_32bit_registers(program)
+    reg_remove = list(non_32_registers) + exclude_registers
+    reg_candidates = sorted(list(set([ x for x in program.registers if x not in reg_remove])), key=lambda x: int(x.replace('R','')))
+    
+    reg_candidates = sorted(reg_candidates, key=lambda x: reg_access[Register(x)])
+
+    pprint(reg_access)
+    return reg_candidates
+
+def collect_non_32bit_registers(program):
+    reg_dict = {}
+    registers_dict = {}
+    register_counter = 0
+    
+    reg_set = set()
+    
+    for inst in [x for x in program.ast if isinstance(x, Instruction)]:
+        # Detecting 64-bit accesses
+        if (inst.opcode.type == 'x32' and 
+            inst.opcode.integer_inst and 
+            inst.opcode.reg_store and 
+            inst.dest):
+            if inst.dest.carry_bit:
+                opcode = inst.opcode
+                inst_pos = program.ast.index(inst)
+                
+                for next_inst in [x for x in program.ast[inst_pos:] if isinstance(x, Instruction)]:
+                    if next_inst.opcode.use_carry_bit:
+                        #if abs(int(inst.dest.name.replace('R','')) - int(next_inst.dest.name.replace('R',''))) == 1: 
+                        reg_set.add(inst.dest.name)
+                        reg_set.add(next_inst.dest.name)
+                        break
+    
+        if (inst.opcode.op_bit != 32):
+            reg_list = [x for x in inst.operands if isinstance(x, Register)]
+            if inst.dest and isinstance(inst.dest, Register):
+                reg_list.append(inst.dest)
+            
+            for reg in reg_list:
+                reg_id = reg.id
+                reg_set.add("R%d" % reg_id)
+                
+                if inst.opcode.op_bit > 32:
+                    reg_need = int(inst.opcode.op_bit / 32)
+                    if reg_id % reg_need != 0:
+                        reg_id = reg_id - (reg_id % reg_need)
+                    for r in range(0, int(inst.opcode.op_bit/32)):
+                        reg_set.add("R%d" % (reg_id+r))
+              
+    return reg_set
