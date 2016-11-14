@@ -61,13 +61,14 @@ def compile(args):
             exclude_registers.append(args.exclude_registers)
         
         reg_candidates = generate_spill_candidates_cfg(program, cfg, exclude_registers=exclude_registers)
-        cfg.create_dot_graph("cfg.dot")
+        pprint(reg_candidates)
         #reg_candidates = generate_spill_candidates(program, exclude_registers=exclude_registers)
+        #pprint(reg_candidates)
         skipped_candidates = []
         interference_dict = analyse_register_interference(program, reg_candidates)
-        access_dict = analyse_register_accesses(program, reg_candidates)
+        access_dict = analyse_register_accesses(program, reg_candidates)        
         
-        pprint(reg_candidates)
+        cfg.create_dot_graph("cfg.dot")
         
         last_reg = sorted(program.registers, key=lambda x: int(x.replace('R','')), reverse=True)[0]
         last_reg_id = int(last_reg.replace('R',''))

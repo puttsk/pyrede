@@ -110,18 +110,27 @@ def relocate_registers_new(program):
                     if next_inst.opcode.use_carry_bit:
                         relocate_reg = RelocatableRegister(inst.dest, bits=64) 
                         for reg in relocate_reg.registers:
-                            relocation_space[reg.id] = relocate_reg      
+                            if not relocation_space[reg.id]: 
+                                relocation_space[reg.id] = relocate_reg
+                            elif relocation_space[reg.id].bits < relocate_reg.bits:
+                                relocation_space[reg.id] = relocate_reg
                         #reg_set.add(next_inst.dest.name)
                         break
         
-        if (inst.opcode.op_bit != 32):
-            reg_list = [x for x in inst.operands if isinstance(x, Register)]
-            if inst.dest and isinstance(inst.dest, Register):
-                reg_list.append(inst.dest)
-            
-            for reg in reg_list:
-                relocate_reg = RelocatableRegister(reg, bits=inst.opcode.op_bit)
-                for reg in relocate_reg.registers:
+        #if (inst.opcode.op_bit != 32):
+        reg_list = [x for x in inst.operands if isinstance(x, Register)]
+        if inst.dest and isinstance(inst.dest, Register):
+            reg_list.append(inst.dest)
+        
+        for reg in reg_list:
+            if reg.is_special:
+                continue
+                
+            relocate_reg = RelocatableRegister(reg, bits=inst.opcode.op_bit)
+            for reg in relocate_reg.registers:
+                if not relocation_space[reg.id]: 
+                    relocation_space[reg.id] = relocate_reg
+                elif relocation_space[reg.id].bits < relocate_reg.bits:
                     relocation_space[reg.id] = relocate_reg
     
     for reg in program.registers:
@@ -174,7 +183,7 @@ def relocate_registers_new(program):
             else:
                 # The available register is even register
                 # Check if the next register is movable
-                required_reg_count = int(next_reg.bits / 32)
+                required_reg_count = max(int(next_reg.bits / 32), 1)
                 if empty_loc % required_reg_count == 0:
                     # The register is movable. Move register to empty location
                     for i in range(required_reg_count):

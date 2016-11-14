@@ -58,8 +58,9 @@ def analyse_register_accesses(program, register_list = None):
     
 def generate_spill_candidates(program, exclude_registers=[]):
     print("[ANA_SPILL] Generating spilled register candidates. Excluding registers: %s" % exclude_registers)
-    reg_64 = collect_non_32bit_registers(program)
-    
+    #reg_64 = collect_non_32bit_registers(program)
+    reg_64 = collect_64bit_registers(program)
+
     reg_remove = list(reg_64) + exclude_registers
     reg_candidates = sorted(list(set([ x for x in program.registers if x not in reg_remove])), key=lambda x: int(x.replace('R','')))
     
@@ -180,7 +181,7 @@ def collect_global_memory_access(program):
     return mem_reg
 
 
-def __update_loop_reg_access(cfg, loop_begin, loop_end, update_factor = 10):
+def __update_loop_reg_access(cfg, loop_begin, loop_end, update_factor = 2):
     traverse_order = Cfg.generate_breadth_first_order(loop_begin, loop_end)
     
     if getattr(loop_begin, 'visited_source', False):
@@ -313,12 +314,8 @@ def generate_spill_candidates_cfg(program, cfg, exclude_registers=[]):
             for k in block_reg_access:
                 if k not in reg_access.keys():
                     reg_access[k] = block_reg_access[k]
-                    if k == 'R32':
-                        pprint(reg_access[k])
                 else:
                     reg_access[k] += block_reg_access[k]
-                    if k == 'R32':
-                        pprint(reg_access[k])
     
     non_32_registers = collect_non_32bit_registers(program)
     reg_remove = list(non_32_registers) + exclude_registers
@@ -326,7 +323,7 @@ def generate_spill_candidates_cfg(program, cfg, exclude_registers=[]):
     
     reg_candidates = sorted(reg_candidates, key=lambda x: reg_access[Register(x)])
 
-    pprint(reg_access)
+    #pprint(reg_access)
     return reg_candidates
 
 def collect_non_32bit_registers(program):
@@ -348,12 +345,12 @@ def collect_non_32bit_registers(program):
                 
                 for next_inst in [x for x in program.ast[inst_pos:] if isinstance(x, Instruction)]:
                     if next_inst.opcode.use_carry_bit:
-                        #if abs(int(inst.dest.name.replace('R','')) - int(next_inst.dest.name.replace('R',''))) == 1: 
-                        reg_set.add(inst.dest.name)
-                        reg_set.add(next_inst.dest.name)
-                        break
+                        if abs(int(inst.dest.name.replace('R','')) - int(next_inst.dest.name.replace('R',''))) == 1: 
+                            reg_set.add(inst.dest.name)
+                            reg_set.add(next_inst.dest.name)
+                            break
     
-        if (inst.opcode.op_bit != 32):
+        if (inst.opcode.op_bit > 32):
             reg_list = [x for x in inst.operands if isinstance(x, Register)]
             if inst.dest and isinstance(inst.dest, Register):
                 reg_list.append(inst.dest)
@@ -361,6 +358,8 @@ def collect_non_32bit_registers(program):
             for reg in reg_list:
                 reg_id = reg.id
                 reg_set.add("R%d" % reg_id)
+                if reg.id == 53:
+                    pprint(inst)
                 
                 if inst.opcode.op_bit > 32:
                     reg_need = int(inst.opcode.op_bit / 32)
@@ -368,5 +367,5 @@ def collect_non_32bit_registers(program):
                         reg_id = reg_id - (reg_id % reg_need)
                     for r in range(0, int(inst.opcode.op_bit/32)):
                         reg_set.add("R%d" % (reg_id+r))
-              
+       
     return reg_set

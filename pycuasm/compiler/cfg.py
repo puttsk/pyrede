@@ -141,7 +141,7 @@ class BasicBlock(Block):
         repr = ''
         for inst in self.instructions:
             inst_str = str(inst)
-            inst_str = inst_str.replace("'{'", ' ').replace("'}'", ' ')
+            inst_str = inst_str.replace('{', ' ').replace('}', ' ')
             repr += inst_str + "\l"
         return repr
         
@@ -330,7 +330,8 @@ class Cfg(object):
         # Construct CFG basic blocks
         label_table = {} 
         sync_point = None
-        
+        sync_stack = []
+
         self.add_basic_block(StartBlock())
         for lead_inst in leader:
             next_leader = leader.index(lead_inst)+1 
@@ -359,9 +360,11 @@ class Cfg(object):
                 block.attach_label(label)
                 label_table[label.name] = block
                 if label.name == sync_point:
-                    sync_point = None
-            
+                    sync_point = sync_stack.pop()
+
+            # TODO
             if block.sync_point:
+                sync_stack.append(sync_point)
                 sync_point = block.sync_point
             else:
                 block.sync_point = sync_point
@@ -409,7 +412,7 @@ class Cfg(object):
                             block.connect_not_taken(label_table[last_inst.operands[0].name]) 
                         block.connect_taken(self.__blocks[idx+1] if idx < len(self.__blocks)-1 else None)
                 else:
-                    if last_inst.opcode.name == 'SYNC':
+                    if last_inst.opcode.name == 'SYNC':    
                         block.connect_taken(label_table[block.sync_point])
                     else:
                         block.connect_taken(label_table[last_inst.operands[0].name])
