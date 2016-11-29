@@ -3,7 +3,7 @@ from pycuasm.compiler.hir import *
 
 import json
 
-JUMP_OPS = ['BRA', 'PBK', 'PCNT', 'SYNC']
+JUMP_OPS = ['BRA', 'BRK', 'CONT', 'SYNC']
 CALL_OPS = ['CAL', 'JCAL'] 
 
 class Block(object):
@@ -76,6 +76,8 @@ class BasicBlock(Block):
         self.label = label
         self.condition = self.instructions[-1].condition
         self.sync_point = None
+        self.break_point = None
+        self.cont_point = None
         
         registers = []
         pointers = []
@@ -91,6 +93,10 @@ class BasicBlock(Block):
                 
                 if inst.opcode.name == 'SSY':
                     self.sync_point = inst.operands[0].name
+                if inst.opcode.name == 'PBK':
+                    self.break_point = inst.operands[0].name
+                if inst.opcode.name == 'PCNT':
+                    self.cont_point = inst.operands[0].name
             else:
                 raise ValueError("Invalid IR Type: %s %s" % (inst.__class__, inst))
 
@@ -248,6 +254,10 @@ class Cfg(object):
                 param += 'READ: %s|' % (block.register_reads.items() if block.register_reads else "[]")
                 if block.sync_point:
                     param += 'SYNC Point: %s|' % block.sync_point
+                if block.break_point:
+                    param += 'BRK Point: %s|' % block.break_point
+                if block.cont_point:
+                    param += 'CONT Point: %s|' % block.cont_point
                 param += "{%s}" % block.get_dot_node()
                 #param += '| DEF: %s' % (list(block.var_def) if block.var_def else "[]")
                 param += '| WRITE: %s' % (block.register_writes.items() if block.register_writes else "[]")
@@ -265,7 +275,7 @@ class Cfg(object):
                     nodes += 'block%s:branch -> block%s%s [label="taken", headport="ne", tailport="se"];\n' % (
                         self.__blocks.index(block),
                         self.__blocks.index(block.taken),
-                        ":label" if block.taken.label else "")
+                        ":label" if getattr(block.taken,'label', False) else "")
                 else:
                     nodes += 'block%s -> block%s;\n' % (self.__blocks.index(block), self.__blocks.index(block.taken))
             if block.not_taken:
@@ -330,6 +340,8 @@ class Cfg(object):
         # Construct CFG basic blocks
         label_table = {} 
         sync_point = None
+        break_point = None
+        cont_point = None
         sync_stack = []
 
         self.add_basic_block(StartBlock())
@@ -368,6 +380,16 @@ class Cfg(object):
                 sync_point = block.sync_point
             else:
                 block.sync_point = sync_point
+                
+            if block.break_point:
+                break_point = block.break_point
+            else:
+                block.break_point = break_point
+            
+            if block.cont_point:
+                cont_point = block.cont_point
+            else:
+                block.cont_point = cont_point
             
         self.__return_blocks = []
                 
@@ -390,7 +412,15 @@ class Cfg(object):
             
             if last_inst.opcode.name not in JUMP_OPS and idx < len(self.__blocks)-1:
                 if last_inst.opcode.name == 'EXIT':
-                    block.connect_taken(self.__end_block)
+                    if block.condition:
+                        if block.condition.condition:
+                            block.connect_taken(self.__end_block)
+                            block.connect_not_taken(self.__blocks[idx+1] if idx < len(self.__blocks)-1 else None)
+                        else:
+                            block.connect_not_taken(self.__end_block)
+                            block.connect_taken(self.__blocks[idx+1] if idx < len(self.__blocks)-1 else None)
+                    else:
+                        block.connect_taken(self.__end_block)
                 elif last_inst.opcode.name == 'RET':
                     ret_block = ReturnBlock()
                     self.__return_blocks.append(ret_block)
@@ -402,18 +432,30 @@ class Cfg(object):
                     if block.condition.condition:
                         if last_inst.opcode.name == 'SYNC':
                             block.connect_taken(label_table[block.sync_point])
+                        elif last_inst.opcode.name == 'BRK':
+                            block.connect_taken(label_table[block.break_point])
+                        elif last_inst.opcode.name == 'CONT':
+                            block.connect_taken(label_table[block.cont_point])
                         else:
                             block.connect_taken(label_table[last_inst.operands[0].name]) 
                         block.connect_not_taken(self.__blocks[idx+1] if idx < len(self.__blocks)-1 else None)
                     else:
                         if last_inst.opcode.name == 'SYNC':
                             block.connect_not_taken(label_table[block.sync_point])
+                        elif last_inst.opcode.name == 'BRK':
+                            block.connect_not_taken(label_table[block.break_point])
+                        elif last_inst.opcode.name == 'CONT':
+                            block.connect_not_taken(label_table[block.cont_point])
                         else:
                             block.connect_not_taken(label_table[last_inst.operands[0].name]) 
                         block.connect_taken(self.__blocks[idx+1] if idx < len(self.__blocks)-1 else None)
                 else:
                     if last_inst.opcode.name == 'SYNC':    
                         block.connect_taken(label_table[block.sync_point])
+                    elif last_inst.opcode.name == 'BRK':
+                        block.connect_taken(label_table[block.break_point])
+                    elif last_inst.opcode.name == 'CONT':
+                        block.connect_taken(label_table[block.cont_point])
                     else:
                         block.connect_taken(label_table[last_inst.operands[0].name])
             for block in self.__return_blocks:
