@@ -187,9 +187,14 @@ class Opcode(object):
                 self.op_bit = 16     
 
             # TODO: This is a quick fix for shift.u64.hi
-            if 'U64' == extension and 'HI' in self.extension:
+            if ('U64' == extension and 'HI' in self.extension or 
+                self.name == 'SHF'
+            ):
                 self.op_bit = 32
                 pprint(self)
+        # TODO: This is a quick fix for shift.u64.hi
+        if self.name == 'MUFU':
+            self.op_bit = 32
 
     def __str__(self):
         return self.full 

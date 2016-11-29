@@ -361,6 +361,10 @@ class Cubin():
                         while idx < len(data) and data[idx] != 0x00080a04:
                             idx += 1
                         
+                        # TODO: This is a quick fix for nn bug
+                        if idx+2 >= len(data):
+                            continue
+                            
                         first = data[idx+2] & 0xFFFF
                         idx += 4
                         

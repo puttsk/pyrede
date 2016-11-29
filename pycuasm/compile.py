@@ -60,15 +60,13 @@ def compile(args):
         if args.exclude_registers:
             exclude_registers.append(args.exclude_registers)
         
+        cfg.create_dot_graph("cfg.dot")
         reg_candidates = generate_spill_candidates_cfg(program, cfg, exclude_registers=exclude_registers)
-        pprint(reg_candidates)
         #reg_candidates = generate_spill_candidates(program, exclude_registers=exclude_registers)
-        #pprint(reg_candidates)
+        pprint(reg_candidates)
         skipped_candidates = []
         interference_dict = analyse_register_interference(program, reg_candidates)
         access_dict = analyse_register_accesses(program, reg_candidates)        
-        
-        cfg.create_dot_graph("cfg.dot")
         
         last_reg = sorted(program.registers, key=lambda x: int(x.replace('R','')), reverse=True)[0]
         last_reg_id = int(last_reg.replace('R',''))
@@ -132,11 +130,12 @@ def compile(args):
                 
                 reg_candidates = sorted(reg_candidates, key=lambda x: access_dict[x[0]]['read'] +  access_dict[x[0]]['write'])
                 spilled_count = spilled_count + 2 
-        
+            program.update()
+            
         print("[REG_SPILL] Spilled %d registers to shared memory." % (spilled_count))
         
         remove_redundant_spill_instruction(program, Register("R%d" % spill_register_addr_id))
-        rearrange_spill_instruction(program, Register("R%d" % spill_register_id) ,Register("R%d" % spill_register_addr_id)) 
+        #rearrange_spill_instruction(program, Register("R%d" % spill_register_id) ,Register("R%d" % spill_register_addr_id)) 
         
     if not args.no_register_relocation:
         #relocate_registers(program)

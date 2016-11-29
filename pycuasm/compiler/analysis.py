@@ -58,8 +58,8 @@ def analyse_register_accesses(program, register_list = None):
     
 def generate_spill_candidates(program, exclude_registers=[]):
     print("[ANA_SPILL] Generating spilled register candidates. Excluding registers: %s" % exclude_registers)
-    #reg_64 = collect_non_32bit_registers(program)
-    reg_64 = collect_64bit_registers(program)
+    reg_64 = collect_non_32bit_registers(program)
+    #reg_64 = collect_64bit_registers(program)
 
     reg_remove = list(reg_64) + exclude_registers
     reg_candidates = sorted(list(set([ x for x in program.registers if x not in reg_remove])), key=lambda x: int(x.replace('R','')))
@@ -76,8 +76,7 @@ def generate_64bit_spill_candidates(program, exclude_registers=[]):
     print("[ANA_SPILL] Generating spilled 64-bit register candidates. Excluding registers: %s" % exclude_registers)
     list_64bit_registers = collect_64bit_registers(program)
     #reg_mem =  collect_global_memory_access(program)
-    reg_mem = []
-    
+    reg_mem = []    
     #pprint(list_64bit_registers)
     
     exclude_list = []
@@ -320,10 +319,10 @@ def generate_spill_candidates_cfg(program, cfg, exclude_registers=[]):
     non_32_registers = collect_non_32bit_registers(program)
     reg_remove = list(non_32_registers) + exclude_registers
     reg_candidates = sorted(list(set([ x for x in program.registers if x not in reg_remove])), key=lambda x: int(x.replace('R','')))
-    
+
+    pprint(reg_access)    
     reg_candidates = sorted(reg_candidates, key=lambda x: reg_access[Register(x)])
 
-    #pprint(reg_access)
     return reg_candidates
 
 def collect_non_32bit_registers(program):
@@ -345,7 +344,7 @@ def collect_non_32bit_registers(program):
                 
                 for next_inst in [x for x in program.ast[inst_pos:] if isinstance(x, Instruction)]:
                     if next_inst.opcode.use_carry_bit:
-                        if abs(int(inst.dest.name.replace('R','')) - int(next_inst.dest.name.replace('R',''))) == 1: 
+                        if next_inst.dest and abs(int(inst.dest.name.replace('R','')) - int(next_inst.dest.name.replace('R',''))) == 1: 
                             reg_set.add(inst.dest.name)
                             reg_set.add(next_inst.dest.name)
                             break
