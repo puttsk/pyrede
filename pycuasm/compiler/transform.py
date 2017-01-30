@@ -312,6 +312,9 @@ def rename_registers(program, registers_dict):
             if isinstance(op, Pointer):
                 if op.register.name in registers_dict:
                     op.register.rename(Register(registers_dict[op.register.name]))
+            elif isinstance(op, Constant) and op.pointer:
+                if op.pointer.register.name in registers_dict:
+                    op.pointer.register.rename(Register(registers_dict[op.pointer.register.name]))
             elif isinstance(op, Register):
                 if op.name in registers_dict:
                     inst.operands[inst.operands.index(op)].rename(Register(registers_dict[op.name]))
@@ -487,6 +490,19 @@ def spill_register_to_shared(
                     if isinstance(prev_inst, SpillStoreInstruction):
                          shared_load_inst.flags.wait_barrier = shared_load_inst.flags.wait_barrier | 0x8 
                     program.ast.insert(program.ast.index(inst), shared_load_inst)
+            elif isinstance(op, Constant) and op.pointer:
+                if target_register == op.pointer.register:
+                    r_count = r_count + 1
+                    # Load data from shared memory
+                    op.pointer.register.rename(spill_register)
+                    # Set the instruction that read still register to wait for shared memory read 
+                    shared_load_inst = copy.deepcopy(load_shr_inst)
+                    shared_load_inst.flags.read_barrier = barrier_tracker.get_available_flags('r')
+                    shared_load_inst.flags.write_barrier = barrier_tracker.get_available_flags('w')
+                    inst.flags.wait_barrier = inst.flags.wait_barrier | (1 << (shared_load_inst.flags.read_barrier-1) | 1 << (shared_load_inst.flags.write_barrier-1))
+                    if isinstance(prev_inst, SpillStoreInstruction):
+                         shared_load_inst.flags.wait_barrier = shared_load_inst.flags.wait_barrier | 0x8 
+                    program.ast.insert(program.ast.index(inst), shared_load_inst)
         
         if isinstance(inst.dest, Pointer):
             if target_register == inst.dest.register:
@@ -532,12 +548,16 @@ def spill_register_to_shared(
                 inst_next = program.ast[program.ast.index(st_inst) + 1] 
                 if isinstance(inst_next, Instruction):
                     inst_next.flags.wait_barrier = inst_next.flags.wait_barrier | (1 << (st_inst.flags.read_barrier -1))
+                    if inst_next.flags.stall == 0:
+                        inst_next.flags.stall = 6
         
         barrier_tracker.update_flags(inst.flags)
                                    
     print("[REG_SPILL] Read accesses: %d Write accesses: %d" % (r_count, w_count))   
     program.update()
     
+
+
 def spill_64bit_register_to_shared(
         program, 
         target_register64, 
@@ -763,3 +783,128 @@ def spill_64bit_register_to_shared(
                   
     print("[REG_SPILL] Read accesses: %d Write accesses: %d" % (r_count, w_count))   
     program.update()
+
+def spill_local_memory(program, thread_block_size):
+    print("[LOCAL_SPILL]")
+    local_base_reg = None
+    local_offset_list = []
+    for inst in [x for x in program.ast if isinstance(x, Instruction)]:
+        # Collect register with local memory base address
+        if inst.opcode.name == "MOV" and inst.operands[0].name == "c[0x0][0x20]":
+            local_base_reg = inst.dest
+
+        # Collect all local load/store instructions
+        if inst.opcode.name == "LDL":
+            local_mem_ptr = inst.operands[0]
+            if local_mem_ptr.offset not in local_offset_list:
+                local_offset_list.append(local_mem_ptr.offset)
+
+        if inst.opcode.name == "STL":
+            local_mem_ptr = inst.operands[0]
+            if local_mem_ptr.offset not in local_offset_list:
+                local_offset_list.append(local_mem_ptr.offset)
+                            
+    print("[LOCAL_SPILL] Local Memory Base Address Register: %s" % local_base_reg)
+    print("[LOCAL_SPILL] Local Memory Base Address Offsets: %s" % local_offset_list)
+    print("[LOCAL_SPILL] Shared Memory Location Needed: %d" % len(local_offset_list))
+    print("[LOCAL_SPILL] Threadblock Size: %d" % thread_block_size)
+
+    if len(local_offset_list) > 0:
+
+        is_2d_thread_block = False
+        spill_register_addr = Register('R55')
+
+        # Check if the kernel uses 2D thread block
+        for inst in program.ast:
+            if not isinstance(inst, Instruction):
+                continue
+            if inst.opcode.name == 'S2R':
+                # Look for S2R R19, SR_TID.X instruction.
+                if inst.operands[0].name == 'SR_TID' and 'Y' in inst.operands[0].extension:
+                    is_2d_thread_block = True
+                    break
+        
+        # Compute shared memory base address
+        if is_2d_thread_block:
+            tid_x_inst = Instruction(Flags('--','-','1','-','6'), 
+                Opcode('S2R'), 
+                operands=[Register('R2'), Register('SR_TID.X', is_special=True)])
+            
+            tid_y_inst = Instruction(Flags('--','-','2','-','6'), 
+                Opcode('S2R'), 
+                operands=[Register('R3'), Register('SR_TID.Y', is_special=True)])
+            
+            block_dim_x_inst = Instruction(Flags('--','-','-','-','6'), 
+                Opcode('MOV'), 
+                operands=[Register('R4'), 'blockDimX'])
+            
+            tid_mad_inst = Instruction(Flags('03','-','-','-','6'), 
+                Opcode('XMAD'), 
+                operands=[Register('R2'), Register('R3'), Register('R4'), Register('R2')])
+            
+            base_addr_inst = Instruction(Flags('--','-','-','-','6'), 
+                Opcode('SHL'), 
+                operands=[spill_register_addr, Register('R2'), 0x02])
+
+            program.ast.insert(1, tid_x_inst)
+            program.ast.insert(2, tid_y_inst)
+            program.ast.insert(3, block_dim_x_inst)
+            program.ast.insert(4, tid_mad_inst)
+            program.ast.insert(5, base_addr_inst)
+        else:
+            tid_x_inst = Instruction(Flags('--','-','1','-','6'), 
+                Opcode('S2R'), 
+                operands=[Register('R2'), Register('SR_TID.X', is_special=True)])
+            
+            base_addr_inst = Instruction(Flags('01','-','-','-','6'), 
+                Opcode('SHL'), 
+                operands=[spill_register_addr, Register('R2'), 0x02])
+
+            program.ast.insert(1, tid_x_inst)
+            program.ast.insert(2, base_addr_inst)
+
+        
+        local_shared_dict = dict.fromkeys(local_offset_list)
+        spill_offset = program.shared_size
+        spill_count = 0
+
+        pprint(sorted(local_offset_list, key= lambda x: int(str(x), 16)))
+        for local in sorted(local_offset_list, key= lambda x: int(str(x), 16)):
+            local_shared_dict[local] = spill_count * thread_block_size * 4 + program.shared_size
+            spill_count += 1
+
+        pprint(local_shared_dict)
+
+        # Convert local load/store to shared load/store
+        for inst in [x for x in program.ast if isinstance(x, Instruction)]:
+            # Convert local load to shared load
+            if inst.opcode.name == "LDL":
+                if local_shared_dict[inst.operands[0].offset] != None:
+                    inst.opcode.name = "LDS"
+                    inst.opcode.extension = []
+                    inst.flags.yield_hint = False
+                    inst.flags.stall = 6
+                    if inst.flags.read_barrier == 0:
+                        inst.flags.read_barrier = 1
+                    if inst.flags.write_barrier == 0:
+                        inst.flags.write_barrier = 6
+                    inst_next = program.ast[program.ast.index(inst)+1]
+                    inst_next.flags.wait_barrier = inst_next.flags.wait_barrier | (1 << (inst.flags.read_barrier -1))
+                    inst_next.flags.wait_barrier = inst_next.flags.wait_barrier | (1 << (inst.flags.write_barrier -1))
+                    inst.operands[0].register = spill_register_addr
+                    inst.operands[0].offset = local_shared_dict[inst.operands[0].offset]
+
+            if inst.opcode.name == "STL":
+                if local_shared_dict[inst.operands[0].offset] != None:
+                    inst.opcode.name = "STS"
+                    inst.opcode.extension = []
+                    inst.flags.yield_hint = False
+                    inst.flags.stall = 6
+                    if inst.flags.read_barrier == 0:
+                        inst.flags.read_barrier = 1
+                    inst_next = program.ast[program.ast.index(inst)+1]
+                    inst_next.flags.wait_barrier = inst_next.flags.wait_barrier | (1 << (inst.flags.read_barrier -1))
+                    inst.operands[0].register = spill_register_addr
+                    inst.operands[0].offset = local_shared_dict[inst.operands[0].offset]
+        
+        program.update()

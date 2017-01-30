@@ -86,6 +86,7 @@ class BasicBlock(Block):
             if isinstance(inst, Instruction):
                 regs = [x for x in inst.operands + [inst.dest] if isinstance(x, Register) and not x.is_special]
                 regs += [x.register for x in inst.operands + [inst.dest] if isinstance(x, Pointer)]
+                regs += [x.pointer.register for x in inst.operands + [inst.dest] if (isinstance(x, Constant) and x.pointer)]
                 registers += [x for x in regs if x not in registers]
                 
                 ptrs = [x for x in inst.operands + [inst.dest] if isinstance(x, Pointer)]
@@ -124,6 +125,8 @@ class BasicBlock(Block):
                 op = operand
                 if isinstance(op, Pointer):
                     op = op.register
+                elif isinstance(op, Constant) and op.pointer:
+                    op = op.pointer.register
                 if not isinstance(op, Register) or op.is_special:
                     continue
                 
@@ -251,7 +254,8 @@ class Cfg(object):
             if isinstance(block, BasicBlock):
                 param = '<label> %s|' % (block.label if block.label else hex(block.instructions[0].addr))
                 #param += 'LEVEL: %d|' % getattr(block, 'visited_level', -1) 
-                param += 'READ: %s|' % (block.register_reads.items() if block.register_reads else "[]")
+                #param += 'READ: %s|' % (block.register_reads.items() if block.register_reads else "[]")
+                param += 'LIVE_IN: %s|' % (list(block.live_in))
                 if block.sync_point:
                     param += 'SYNC Point: %s|' % block.sync_point
                 if block.break_point:
@@ -260,7 +264,8 @@ class Cfg(object):
                     param += 'CONT Point: %s|' % block.cont_point
                 param += "{%s}" % block.get_dot_node()
                 #param += '| DEF: %s' % (list(block.var_def) if block.var_def else "[]")
-                param += '| WRITE: %s' % (block.register_writes.items() if block.register_writes else "[]")
+                #param += '| WRITE: %s' % (block.register_writes.items() if block.register_writes else "[]")
+                param += '| LIVE_OUT: %s' % (list(block.live_out))
                 if block.condition:
                     param += "|<branch> %s" % block.instructions[-1].opcode
                 
@@ -498,13 +503,14 @@ class Cfg(object):
             while not converge:
                 for node in sorted_blocks:
                     setattr(node, 'old_live_in', node.live_in.copy())
-                    setattr(node, 'old_live_out', node.live_out.copy())
+                    setattr(node, 'old_live_out', node.live_out.copy()) 
                     node.live_out = (node.taken.live_in if node.taken else set()) | \
                                     (node.not_taken.live_in if node.not_taken else set()) 
                     node.live_in = node.var_use | (node.live_out - node.var_def)
+
                 converge = True
                 for node in sorted_blocks:
                     if node.old_live_in != node.live_in:
                         converge = False    
-    
+   
     

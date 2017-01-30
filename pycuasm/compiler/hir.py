@@ -354,15 +354,20 @@ class Register(object):
         self.offset = offset
     
 class Constant(object):
-    def __init__(self, name, is_param = False, is_negative = False, sign=None, extension = ''):
+    def __init__(self, name, is_param = False, is_negative = False, sign=None, extension = '', pointer=None):
         self.name = name
         self.is_param = is_param
         self.is_negative = is_negative
         self.sign = sign
         self.extension = extension
+        self.pointer = pointer
 
     def __str__(self):
-        return "%s%s%s%s" % ( '-' if self.is_negative else '', self.sign if self.sign else '',self.name, self.extension)
+        return "%s%s%s%s%s" % (   '-' if self.is_negative else '', 
+                                self.sign if self.sign else '',
+                                self.name,
+                                self.pointer if self.pointer else '', 
+                                self.extension)
     
     def __repr__(self):
         return self.__str__()

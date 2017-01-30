@@ -137,7 +137,7 @@ def p_constant(p):
             p[0] = Constant(p[1], extension = p[2])
             
     else:
-        p[0] = Constant(p[1] + p[2] + str(p[3]) + p[4] + str(p[5]))
+        p[0] = Constant(p[1] + p[2] + str(p[3]) + p[4], pointer=p[5])
     
 def p_parameter(p):
     '''parameter : PARAMETER
