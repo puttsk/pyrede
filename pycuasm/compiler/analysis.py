@@ -75,9 +75,7 @@ def generate_spill_candidates(program, exclude_registers=[]):
 def generate_64bit_spill_candidates(program, exclude_registers=[]):
     print("[ANA_SPILL] Generating spilled 64-bit register candidates. Excluding registers: %s" % exclude_registers)
     list_64bit_registers = collect_64bit_registers(program)
-    #reg_mem =  collect_global_memory_access(program)
     reg_mem = []    
-    #pprint(list_64bit_registers)
     
     exclude_list = []
     
@@ -91,7 +89,6 @@ def generate_64bit_spill_candidates(program, exclude_registers=[]):
             # Handle multi-word load instruction e.g. LDG.E.128 R4 [R0], which load 4 32-bit words to R4, R5, R6, and R7
             # TODO: Might need to implement this for 32-bit spilling as well
             dest_list = []
-            pprint(inst)
             if "LD" in inst.opcode.name:
                 start_reg_id = int(inst.dest.name.replace('R',''))
                 for i in range (0, int(inst.opcode.op_bit/32), 2):
@@ -100,27 +97,17 @@ def generate_64bit_spill_candidates(program, exclude_registers=[]):
                 start_reg_id = int(inst.operands[1].name.replace('R',''))
                 for i in range (0, int(inst.opcode.op_bit/32), 2):
                     dest_list.append(('R%d' % (start_reg_id + i), 'R%d' % (start_reg_id + i + 1)))
-            #pprint(dest_list)
             exclude_list += dest_list
     
     list_64bit_registers = [x for x in list_64bit_registers if x not in exclude_list]
     reg_candidates = sorted(list_64bit_registers, key=lambda x: int(x[0].replace('R','')))
-
-    pprint(reg_candidates)
 
     list_first_registers = [x[0] for x in list_64bit_registers]
 
     interference_dict = analyse_register_interference(program, list_first_registers)
     access_dict = analyse_register_accesses(program, list_first_registers)
     
-    #pprint(interference_dict)
-    #pprint(access_dict)
-
     reg_candidates = sorted(reg_candidates, key=lambda x: access_dict[x[0]]['read'] +  access_dict[x[0]]['write'])
-    #reg_candidates = sorted(reg_candidates, key=lambda x: len(interference_dict[x]))
-
-    #pprint(reg_candidates)
-    #reg_candidates = [('R20', 'R21'), ('R30', 'R31')]
 
     return reg_candidates
 
@@ -163,7 +150,6 @@ def collect_global_memory_access(program):
     for inst in [x for x in program.ast if isinstance(x, Instruction)]:
         if inst.opcode.type == 'gmem' or inst.opcode.type == 'x64':
             main_reg = None
-            pprint(inst)
             if inst.opcode.name.find('LD') != -1:
                 # Load instruction   
                 main_reg = inst.operands[0].register
@@ -320,7 +306,6 @@ def generate_spill_candidates_cfg(program, cfg, exclude_registers=[]):
     reg_remove = list(non_32_registers) + exclude_registers
     reg_candidates = sorted(list(set([ x for x in program.registers if x not in reg_remove])), key=lambda x: int(x.replace('R','')))
 
-    pprint(reg_access)    
     reg_candidates = sorted(reg_candidates, key=lambda x: reg_access[Register(x)])
 
     return reg_candidates
@@ -348,7 +333,14 @@ def collect_non_32bit_registers(program):
                             reg_set.add(inst.dest.name)
                             reg_set.add(next_inst.dest.name)
                             break
-    
+        
+        # Handle LDG.E and STG.E which use 64-bit address
+        if (inst.opcode.name == 'LDG' or inst.opcode.name == 'STG') and 'E' in inst.opcode.extension:
+            addr_ptr = inst.operands[0]
+            reg_id = addr_ptr.register.id
+            reg_set.add("R%d" % reg_id)
+            reg_set.add("R%d" % (reg_id +1))
+             
         if (inst.opcode.op_bit > 32):
             reg_list = [x for x in inst.operands if isinstance(x, Register)]
             if inst.dest and isinstance(inst.dest, Register):
@@ -357,8 +349,6 @@ def collect_non_32bit_registers(program):
             for reg in reg_list:
                 reg_id = reg.id
                 reg_set.add("R%d" % reg_id)
-                if reg.id == 53:
-                    pprint(inst)
                 
                 if inst.opcode.op_bit > 32:
                     reg_need = int(inst.opcode.op_bit / 32)

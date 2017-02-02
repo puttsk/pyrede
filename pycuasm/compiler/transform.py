@@ -1,49 +1,11 @@
 import copy
 import itertools
+import math
 
 from pprint import pprint
 from pycuasm.compiler.hir import *
 from pycuasm.compiler.analysis import *
-
-class BarrierTracker(object):
-    def __init__(self):
-        # Unset all barrier to
-        # '-' : unset
-        # 'r' : read barrier
-        # 'w' : write barrier 
-        self.barriers = ['-', '-', '-', '-', '-', '-']
-        self.__last_read_flag = 1
-        self.__last_write_flag = 1
-
-    def reset(self):
-        self.barriers = ['-', '-', '-', '-', '-', '-']
-        
-    def update_flags(self, flags):
-        if flags.wait_barrier != 0:
-            for i in range(6):
-                if flags.wait_barrier & 2**i != 0:
-                    self.barriers[i] = '-'
-    
-        if flags.read_barrier != 0:
-            self.barriers[flags.read_barrier-1] = 'r'
-            self.__last_read_flag = flags.read_barrier
-            
-        if flags.write_barrier != 0:
-            self.barriers[flags.write_barrier-1] = 'w'
-            self.__last_write_flag = flags.write_barrier
-    
-    def get_available_flags(self, mode):
-        if '-' in self.barriers:
-            free_barrier = self.barriers.index('-')
-        else:
-            if mode == 'r':
-                free_barrier = self.__last_read_flag - 1
-            else:
-                free_barrier = self.__last_write_flag - 1
-                
-        self.barriers[free_barrier] = mode
-        
-        return free_barrier+1
+from pycuasm.compiler.utils import *
 
 class RelocatableRegister(object):
     def __init__(self, lead_register, bits=32 ):
@@ -99,7 +61,7 @@ class RelocatableRegister(object):
             self.new_registers.append(self.new_lead_register)
 
 
-def relocate_registers_new(program):
+def relocate_registers(program):
     print("[REG_RELOC] Relocating registers.")
     
     relocation_space_size = int(program.registers[-1].replace('R','')) + 1
@@ -157,7 +119,7 @@ def relocate_registers_new(program):
     #pprint(relocation_space)
 
     empty_idx = 0
-    pprint(empty_location_list)
+    print("[REG_RELOC] Empty localtion %s" % (empty_location_list))
     while len(empty_location_list) > 0:
         empty_loc = empty_location_list.pop(0)
         cont_loc_count = 1
@@ -185,7 +147,7 @@ def relocate_registers_new(program):
                     if reg_reloc and reg_reloc.bits == 32 and i > empty_loc:
                         relocation_space[empty_loc] = relocation_space[i]
                         relocation_space[i] = None
-                        print("Move R%d to R%d"  % (i, empty_loc))
+                        print("[REG_RELOC] Move R%d to R%d"  % (i, empty_loc))
                         relocation_space[empty_loc].move(Register('R%d' % empty_loc))
                         break
                 cont_loc_count = cont_loc_count - 1
@@ -200,13 +162,22 @@ def relocate_registers_new(program):
                     for i in range(required_reg_count):
                         relocation_space[empty_loc + i] = relocation_space[next_reg_loc + i]
                         relocation_space[next_reg_loc + i] = None
-                    print("Move %d-bit R%d to R%d"  % (next_reg.bits, next_reg_loc, empty_loc))
+                    print("[REG_RELOC] Move %d-bit R%d to R%d"  % (next_reg.bits, next_reg_loc, empty_loc))
                     relocation_space[empty_loc].move(Register('R%d' % empty_loc))  
                     # Move to next new empty space without reducing the size
                     empty_loc = empty_loc + required_reg_count
                 else: 
                     # TODO: The register is not movable
-                    raise RuntimeError('Register %d is not movable' % empty_loc) 
+                    possible_empty_loc = (int(math.floor(empty_loc / required_reg_count)) + 1) * required_reg_count
+                    # The register is movable. Move register to empty location
+                    for i in range(required_reg_count):
+                        relocation_space[possible_empty_loc + i] = relocation_space[next_reg_loc + i]
+                        relocation_space[next_reg_loc + i] = None
+                    print("[REG_RELOC] Move %d-bit R%d to R%d"  % (next_reg.bits, next_reg_loc, possible_empty_loc))
+                    relocation_space[possible_empty_loc].move(Register('R%d' % possible_empty_loc))
+                    pprint(relocation_space)
+                    empty_loc = possible_empty_loc + required_reg_count
+                    #raise RuntimeError('[REG_RELOC] Register %s to %d is %d-bit and not movable' % (next_reg, empty_loc, required_reg_count * 32)) 
             
             if empty_location_list and empty_loc + cont_loc_count >= empty_location_list[0]:
                 # The current empty space merge with the next one.
@@ -223,7 +194,7 @@ def relocate_registers_new(program):
             for i in range(len(reg_reloc.new_registers)):
                 rename_register(program, reg_reloc.registers[i], reg_reloc.new_registers[i])
 
-def relocate_registers(program):
+def relocate_registers_old(program):
     print("[REG_RELOC] Relocating registers.")
     program_regs = sorted(program.registers, key=lambda x: int(x.replace('R','')))
     #pprint(program_regs)
@@ -295,16 +266,9 @@ def relocate_registers(program):
         if idx == len(program_regs)-1:
             end = True
     
-def rename_registers(program, registers_dict):
-    """ Renaming registers in a program using rules in registers_dict 
-        
-        Args:
-            program (Program): Target program for register renaming
-            registers_dict (dict{str:str}): A dictionary containing a renaming rules. The key represent the old register name and a value contain new register name 
-    """
-    #print("Renaming using dict:" )
-    #pprint(registers_dict)
-    for inst in program.ast:
+
+def rename_registers_inst(instructions, registers_dict, update_dest = True):
+    for inst in instructions:
         if not isinstance(inst, Instruction):
             continue
         
@@ -319,12 +283,24 @@ def rename_registers(program, registers_dict):
                 if op.name in registers_dict:
                     inst.operands[inst.operands.index(op)].rename(Register(registers_dict[op.name]))
                 
-        if isinstance(inst.dest, Pointer):
-            if inst.dest.register.name in registers_dict:
-                inst.dest.register.rename(Register(registers_dict[inst.dest.register.name]))
-        elif isinstance(inst.dest, Register):
-            if inst.dest.name in registers_dict:
-                inst.dest.rename(Register(registers_dict[inst.dest.name]))    
+        if update_dest:
+            if isinstance(inst.dest, Pointer):
+                if inst.dest.register.name in registers_dict:
+                    inst.dest.register.rename(Register(registers_dict[inst.dest.register.name]))
+            elif isinstance(inst.dest, Register):
+                if inst.dest.name in registers_dict:
+                    inst.dest.rename(Register(registers_dict[inst.dest.name]))    
+
+def rename_registers(program, registers_dict):
+    """ Renaming registers in a program using rules in registers_dict 
+        
+        Args:
+            program (Program): Target program for register renaming
+            registers_dict (dict{str:str}): A dictionary containing a renaming rules. The key represent the old register name and a value contain new register name 
+    """
+    #print("Renaming using dict:" )
+    #pprint(registers_dict)
+    rename_registers_inst(program.ast, registers_dict)    
     program.update()
 
 def rename_register(program, old_reg, new_reg):
@@ -529,7 +505,10 @@ def spill_register_to_shared(
                 # Add 1 additional cycle to the store instruction. 
                 if inst.flags.write_barrier != 0:
                     st_inst.flags.wait_barrier = st_inst.flags.wait_barrier |( 1 << (inst.flags.write_barrier-1))
+                    if inst.flags.read_barrier != 0:
+                        st_inst.flags.wait_barrier = st_inst.flags.wait_barrier |( 1 << (inst.flags.read_barrier-1))
                     inst.flags.stall = inst.flags.stall + 1
+                    inst.flags.yield_hint = False
                 else:
                     if(inst.opcode.grammar.type == 'gmem' or inst.opcode.grammar.type == 'smem'):
                         inst.flags.write_barrier = barrier_tracker.get_available_flags('w')

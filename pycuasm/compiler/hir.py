@@ -115,11 +115,18 @@ class Instruction(object):
     def reg_store(self):
         return self.opcode.reg_store
 
-class SpillLoadInstruction(Instruction):
+class SpillInstruction(Instruction):
     pass
+
+class SpillLoadInstruction(SpillInstruction):
+    def __init__(self, flags, opcode, operands=None, condition=None):
+        super(SpillInstruction, self).__init__(flags, opcode, operands, condition)
+        self.spill_reg = self.dest
     
-class SpillStoreInstruction(Instruction):
-    pass
+class SpillStoreInstruction(SpillInstruction):
+    def __init__(self, flags, opcode, operands=None, condition=None):
+        super(SpillInstruction, self).__init__(flags, opcode, operands, condition)
+        self.spill_reg = self.operands[1]
 
 class Flags(object):
     def __init__(self, wait_barrier, read_barrier, write_barrier, yield_hint, stall):
