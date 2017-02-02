@@ -62,7 +62,7 @@ def compile(args):
             exclude_registers.append(args.exclude_registers)
         
         reg_candidates = generate_spill_candidates_cfg(program, cfg, exclude_registers=exclude_registers)
-        cfg.create_dot_graph("cfg.dot")
+        #cfg.create_dot_graph("cfg.dot")
         #reg_candidates = generate_spill_candidates(program, exclude_registers=exclude_registers)
         pprint(reg_candidates)
         skipped_candidates = []
@@ -135,18 +135,15 @@ def compile(args):
             
         print("[REG_SPILL] Spilled %d registers to shared memory." % (spilled_count))
         
-        remove_redundant_spill_instruction(program, Register("R%d" % spill_register_addr_id))
-        #rearrange_spill_instruction(program, Register("R%d" % spill_register_id) ,Register("R%d" % spill_register_addr_id)) 
-
+        remove_redundant_spill_instruction(program, Register("R%d" % spill_register_addr_id)) 
+        
     if args.use_local_spill:
         spill_local_memory(program, args.thread_block_size)
     if not args.no_register_relocation:
-        #relocate_registers(program)
-        relocate_registers_new(program)
+        relocate_registers(program)
         
-    cfg = Cfg(program)
-    cfg.analyze_liveness()
-    cfg.create_dot_graph("cfg.dot")
+    rearrange_spill_instruction(program, Register("R%d" % spill_register_id) ,Register("R%d" % spill_register_addr_id))    
+            
     program.save(args.output)
     return
     

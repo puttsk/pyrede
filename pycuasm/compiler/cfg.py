@@ -63,7 +63,7 @@ class ReturnBlock(Block):
         return "<Return>"
 
 class BasicBlock(Block):
-    def __init__(self, instructions, label=None, taken=None, not_taken=None):
+    def __init__(self, instructions, line, label=None, taken=None, not_taken=None):
         super().__init__(taken, not_taken)
     
         if isinstance(instructions, list):
@@ -78,7 +78,7 @@ class BasicBlock(Block):
         self.sync_point = None
         self.break_point = None
         self.cont_point = None
-        
+        self.line = line
         registers = []
         pointers = []
         
@@ -139,7 +139,8 @@ class BasicBlock(Block):
             # First read is before first write
             if reg_read_map[reg] and reg_write_map[reg] and reg_read_map[reg][0] <= reg_write_map[reg][0]:
                 self.var_use.add(reg)
-                
+            
+            # Have only read access    
             if reg_read_map[reg] and len(reg_write_map[reg]) == 0:
                 self.var_use.add(reg)
             
@@ -151,6 +152,7 @@ class BasicBlock(Block):
         for inst in self.instructions:
             inst_str = str(inst)
             inst_str = inst_str.replace('{', ' ').replace('}', ' ')
+            inst_str = inst_str.replace('|', ' ')
             repr += inst_str + "\l"
         return repr
         
@@ -254,8 +256,14 @@ class Cfg(object):
             if isinstance(block, BasicBlock):
                 param = '<label> %s|' % (block.label if block.label else hex(block.instructions[0].addr))
                 #param += 'LEVEL: %d|' % getattr(block, 'visited_level', -1) 
+                param += 'LINE: %d|' % (block.line)
                 #param += 'READ: %s|' % (block.register_reads.items() if block.register_reads else "[]")
+                param += 'FREE: %s|' % (list(block.free_reg))
                 param += 'LIVE_IN: %s|' % (list(block.live_in))
+                if getattr(block, "var_def", False):
+                    param += 'DEF: %s|' % (list(block.var_def))
+                if getattr(block, "var_use", False):
+                    param += 'USE: %s|' % (list(block.var_use))
                 if block.sync_point:
                     param += 'SYNC Point: %s|' % block.sync_point
                 if block.break_point:
@@ -367,9 +375,9 @@ class Cfg(object):
             # leader and the next leader
             block = None
             if(len(program.ast[ast_idx:ast_idx_next]) == 1) and program.ast[ast_idx].opcode.name in CALL_OPS:
-                block = CallBlock(program.ast[ast_idx:ast_idx_next],)
+                block = CallBlock(program.ast[ast_idx:ast_idx_next],ast_idx)
             else:
-                block = BasicBlock(program.ast[ast_idx:ast_idx_next],)        
+                block = BasicBlock(program.ast[ast_idx:ast_idx_next],ast_idx)        
             self.add_basic_block(block)
                         
             if ast_idx > 0 and isinstance(program.ast[ast_idx-1], Label):
