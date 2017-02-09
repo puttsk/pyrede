@@ -104,18 +104,18 @@ def compile(args):
             reg_candidates = sorted(reg_candidates, key=lambda x: access_dict[x]['read'] +  access_dict[x]['write'])
             spilled_count = spilled_count + 1        
         
-        pprint(spill_bank_list)
-        max_spill_bank = 0
-        max_spill_count = 0
-        for i in range(4):
-            if len(spill_bank_list[i]) > max_spill_count:
-                max_spill_bank = i
-                max_spill_count = len(spill_bank_list[i])
-             
-        if spill_register_id % 4 != max_spill_bank:
-            new_reg_id = int(math.ceil(spill_register_id / 4))*4 + max_spill_bank
-            rename_register(program, Register('R%d' % (spill_register_id)), Register('R%d' % (new_reg_id)))
-            print("[REG_SPILL] Change spill regiter R%d to R%d" % (spill_register_id, new_reg_id))
+        if not args.no_conflict_avoidance:
+            max_spill_bank = 0
+            max_spill_count = 0
+            for i in range(4):
+                if len(spill_bank_list[i]) > max_spill_count:
+                    max_spill_bank = i
+                    max_spill_count = len(spill_bank_list[i])
+                
+            if spill_register_id % 4 != max_spill_bank:
+                new_reg_id = int(math.ceil(spill_register_id / 4))*4 + max_spill_bank
+                rename_register(program, Register('R%d' % (spill_register_id)), Register('R%d' % (new_reg_id)))
+                print("[REG_SPILL] Change spill regiter R%d to R%d" % (spill_register_id, new_reg_id))
             
         
         if spilled_target - spilled_count > 0:
@@ -159,11 +159,16 @@ def compile(args):
         spill_local_memory(program, args.thread_block_size)
     
     if not args.no_register_relocation:
-        relocate_registers_conflict(program)
-        #relocate_registers(program)
+        if args.no_conflict_avoidance:
+            relocate_registers(program)
+        else:
+            relocate_registers_conflict(program)
         
     if not args.use_local_spill:
-        rearrange_spill_instruction(program, Register("R%d" % spill_register_id) ,Register("R%d" % spill_register_addr_id))    
+        rearrange_spill_instruction(program, 
+                    Register("R%d" % spill_register_id) ,
+                    Register("R%d" % spill_register_addr_id),
+                    avoid_conflict=not args.no_conflict_avoidance)    
             
     program.save(args.output)
     return

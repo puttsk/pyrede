@@ -115,7 +115,7 @@ def relocate_registers_conflict(program):
         if not relocation_space[loc]:
             empty_location_list.append(loc)
     
-    pprint(relocation_space)
+    #pprint(relocation_space)
 
     empty_idx = 0
     print("[REG_RELOC] Empty localtion %s" % (empty_location_list))
@@ -176,7 +176,7 @@ def relocate_registers_conflict(program):
                     non_conflict_idx = relocation_space.index(non_conflict_loc)
                     #relocation_space[empty_loc] = copy.copy(relocation_space[non_conflict_idx])
                     #relocation_space[empty_loc].move(Register('R%d' % (empty_loc)))
-                    print("[REG_RELOC] Move %d-bit R%s to R%d - no conflict"  % (non_conflict_loc.bits, non_conflict_loc, empty_loc))
+                    print("[REG_RELOC] Move %d-bit R%s to R%d - avoid conflict"  % (non_conflict_loc.bits, non_conflict_loc.lead_register, empty_loc))
                     for i in range(required_reg_count):
                         relocation_space[empty_loc + i] = relocation_space[non_conflict_idx + i]
                         relocation_space[non_conflict_idx + i] = None
@@ -186,7 +186,7 @@ def relocate_registers_conflict(program):
                     empty_loc = empty_loc + required_reg_count
                     cont_loc_count -= required_reg_count
                     empty_location_list = list(sorted(empty_location_list))
-                    pprint(empty_location_list)
+                    #pprint(empty_location_list)
                 else:
                     required_reg_count = max(int(next_reg.bits / 32), 1)
                     if empty_loc % required_reg_count == 0:
@@ -207,7 +207,7 @@ def relocate_registers_conflict(program):
                             relocation_space[next_reg_idx + i] = None
                         print("[REG_RELOC] Move %d-bit R%d to R%d - move 2"  % (next_reg.bits, next_reg_idx, possible_empty_loc))
                         relocation_space[possible_empty_loc].move(Register('R%d' % possible_empty_loc))
-                        pprint(relocation_space)
+                        #pprint(relocation_space)
                         empty_loc = possible_empty_loc + required_reg_count
                         #raise RuntimeError('[REG_RELOC] Register %s to %d is %d-bit and not movable' % (next_reg, empty_loc, required_reg_count * 32)) 
                 
@@ -218,7 +218,7 @@ def relocate_registers_conflict(program):
                         empty_location_list.pop(0)
                         cont_loc_count += 1
 
-    pprint(relocation_space)
+    #pprint(relocation_space)
     for reg_reloc in relocation_space:
         if reg_reloc and reg_reloc.new_lead_register:
             for i in range(len(reg_reloc.new_registers)):
