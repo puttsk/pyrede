@@ -48,7 +48,7 @@ def compile(args):
     program = sass_parser.parse(sass.sass_raw, lexer=sass_lexer)
     program.set_constants(sass.constants)
     program.set_header(sass.header)
-        
+    
     print("Register usage: %s" % sorted(program.registers, key=lambda x: int(x.replace('R',''))))
     
     cfg = Cfg(program)
@@ -82,14 +82,18 @@ def compile(args):
         spill_register_64_id = last_reg_id + 3
         spill_register_addr_id = last_reg_id + 1
 
+        spill_bank_list = [[],[],[],[]]
+
         while len(reg_candidates) > 0 and spilled_count < spilled_target:
-            spilled_reg = reg_candidates.pop(0)
+            spilled_reg = Register(reg_candidates.pop(0))
             spill_register_to_shared(
                 program, 
-                Register(spilled_reg), 
+                spilled_reg, 
                 spill_register = Register('R%d' % (spill_register_id)),
                 spill_register_addr = Register('R%d' % (spill_register_addr_id)),
                 thread_block_size=args.thread_block_size)
+            
+            spill_bank_list[spilled_reg.id % 4].append(spilled_reg)
             
             for interference_reg in interference_dict[spilled_reg]:
                 if interference_reg in reg_candidates:
@@ -99,6 +103,20 @@ def compile(args):
             
             reg_candidates = sorted(reg_candidates, key=lambda x: access_dict[x]['read'] +  access_dict[x]['write'])
             spilled_count = spilled_count + 1        
+        
+        pprint(spill_bank_list)
+        max_spill_bank = 0
+        max_spill_count = 0
+        for i in range(4):
+            if len(spill_bank_list[i]) > max_spill_count:
+                max_spill_bank = i
+                max_spill_count = len(spill_bank_list[i])
+             
+        if spill_register_id % 4 != max_spill_bank:
+            new_reg_id = int(math.ceil(spill_register_id / 4))*4 + max_spill_bank
+            rename_register(program, Register('R%d' % (spill_register_id)), Register('R%d' % (new_reg_id)))
+            print("[REG_SPILL] Change spill regiter R%d to R%d" % (spill_register_id, new_reg_id))
+            
         
         if spilled_target - spilled_count > 0:
             print("[REG_SPILL] Spilling 64-bit registers to shared memory.")
@@ -139,10 +157,13 @@ def compile(args):
         
     if args.use_local_spill:
         spill_local_memory(program, args.thread_block_size)
+    
     if not args.no_register_relocation:
-        relocate_registers(program)
+        relocate_registers_conflict(program)
+        #relocate_registers(program)
         
-    rearrange_spill_instruction(program, Register("R%d" % spill_register_id) ,Register("R%d" % spill_register_addr_id))    
+    if not args.use_local_spill:
+        rearrange_spill_instruction(program, Register("R%d" % spill_register_id) ,Register("R%d" % spill_register_addr_id))    
             
     program.save(args.output)
     return

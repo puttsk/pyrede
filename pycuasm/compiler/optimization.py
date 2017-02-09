@@ -10,6 +10,43 @@ JUMP_OPS = REL_OFFSETS + ABS_OFFSETS
 
 SHARED_MEMORY_STALL = 40
 
+def analyze_block_liveness(block):
+    # Perform liveness analysis at block level
+    converge = False
+    next_inst = None
+    
+    for inst in reversed(block.instructions):
+        setattr(inst, 'next_inst', next_inst)
+        setattr(inst, 'live_in', set())
+        setattr(inst, 'live_out', set())
+        setattr(inst, 'var_def', set())
+        setattr(inst, 'var_use', set())
+        if isinstance(inst.dest, Register):
+            inst.var_def |=  set([inst.dest.name])
+        elif isinstance(inst.dest, Pointer):
+            inst.var_use |= set([inst.dest.register.name])
+        
+        for op in inst.operands:
+            if isinstance(op, Register):
+                inst.var_use |=  set([op.name])
+            elif isinstance(op, Pointer):
+                inst.var_use |= set([op.register.name])
+        next_inst = inst
+        
+    while not converge:
+        for inst in reversed(block.instructions):
+            setattr(inst, 'old_live_in', inst.live_in.copy())
+            setattr(inst, 'old_live_out', inst.live_out.copy()) 
+            if inst.next_inst:
+                inst.live_out = inst.next_inst.live_in  
+            inst.live_in = inst.var_use | (inst.live_out - inst.var_def)
+            
+        converge = True
+        for inst in reversed(block.instructions):
+            if inst.old_live_in != inst.live_in:
+                converge = False
+
+
 def rearrange_spill_instruction(program, spill_register, spill_addr_register):
     print("[REG_OPT]: rearrange_spill_instruction ")
     
@@ -45,14 +82,18 @@ def rearrange_spill_instruction(program, spill_register, spill_addr_register):
         if any(isinstance(x, SpillInstruction) for x in block.instructions):
             block_list.append(block)
             
-    for block in block_list:
-    #for block in range(2):
-        #block = block_list[block]
+    #for block in block_list:
+    for block in block_list[:1]:
         pprint(block.line)
-        pprint(block.free_reg)
         pprint(block.instructions)
-        spill_insts = [x for x in block.instructions if isinstance(x, SpillInstruction)]
-        
+         
+        next_inst = None
+    
+        # Add attribute storing next instruction
+        for inst in reversed(block.instructions):
+            setattr(inst, 'next_inst', next_inst)
+            next_inst = inst
+                 
         available_reg = copy.copy(block.free_reg)
         available_reg = sorted(available_reg, key=lambda x: int(x.replace('R','')))
         if 'R1' in available_reg:
@@ -62,47 +103,124 @@ def rearrange_spill_instruction(program, spill_register, spill_addr_register):
 
         barrier_tracker = BarrierTracker()
         barrier_tracker.reset()
+                
+        spill_location_dict = {}    
+        spill_store_dict = {}
+        
+        # Perform liveness analysis at block level
+        analyze_block_liveness(block)
+                
+        # Collect spill instructions in the basic block                    
+        spill_insts = [x for x in block.instructions if isinstance(x, SpillInstruction)]
+        
+        to_remove_list = []
         
         for inst in block.instructions:
             if isinstance(inst, SpillLoadInstruction):
                 inst_idx = block.instructions.index(inst)   
-                paired_inst = block.instructions[block.instructions.index(inst)+1]
                 start_idx = inst_idx
                 spill_reg = inst.spill_reg
-                if len(available_reg) > 0:
+                
+                new_reg = None
+                
+                # Getting instruction that is the target of this spill Instruction 
+                paired_inst = block.instructions[block.instructions.index(inst)+1]
+                
+                next_spill_idx = spill_insts.index(inst)+1
+                if next_spill_idx == len(spill_insts):
+                    next_spill_idx = -1
+                else:
+                    next_spill_idx = block.instructions.index(spill_insts[next_spill_idx])
+                
+                # There is no need to load
+                if inst.shared_offset in spill_location_dict:
+                    new_reg = spill_location_dict[inst.shared_offset]
+                    to_remove_list.append(inst)
+                    flags = (1 << (inst.flags.read_barrier-1) | 1 << (inst.flags.write_barrier-1))
+                    paired_inst.flags.wait_barrier = paired_inst.flags.wait_barrier & ~flags
+                    paired_inst.flags.wait_barrier |= inst.flags.wait_barrier  
+
+                elif len(available_reg) > 0:
                     new_reg = available_reg.pop()
+                    spill_location_dict[inst.shared_offset] = new_reg
+                    spill_store_dict[inst.shared_offset] = []
                     
-                    next_spill_idx = spill_insts.index(inst)+1
-                    if next_spill_idx == len(spill_insts):
-                        next_spill_idx = -1
-                    
-                    if next_spill_idx > -1:
-                        next_spill_idx = block.instructions.index(spill_insts[next_spill_idx])
-                        
+                if new_reg:
                     rename_registers_inst(block.instructions[start_idx:next_spill_idx], {spill_reg.name:new_reg}, update_dest = False)
                     inst.dest = Register(new_reg)
                     rename_registers_inst([paired_inst], {spill_reg.name:new_reg}, update_dest = False)
-
+                                        
             elif isinstance(inst, SpillStoreInstruction):
                 inst_idx = block.instructions.index(inst)
-                paired_inst = block.instructions[inst_idx-1]
                 start_idx = inst_idx - 1
                 spill_reg = inst.spill_reg
                 
-                if len(available_reg) > 0:
+                new_reg = None
+                
+                # Getting instruction that produce value for this store
+                paired_inst = block.instructions[inst_idx-1]
+
+                next_spill_idx = spill_insts.index(inst)+1
+                if next_spill_idx == len(spill_insts):
+                    next_spill_idx = -1
+                else:
+                    next_spill_idx = block.instructions.index(spill_insts[next_spill_idx])
+                
+                if inst.shared_offset in spill_location_dict:
+                    new_reg = spill_location_dict[inst.shared_offset]
+                    # There is no need for this value
+                    if not new_reg in inst.live_out:
+                        pprint(new_reg)
+                        spill_location_dict.pop(inst.shared_offset)
+                        available_reg.append(new_reg)
+                    
+                elif len(available_reg) > 0:
                     new_reg = available_reg.pop()
-                    
-                    next_spill_idx = spill_insts.index(inst)+1
-                    if next_spill_idx == len(spill_insts):
-                        next_spill_idx = -1
-                    
-                    if next_spill_idx > -1:
-                        next_spill_idx = block.instructions.index(spill_insts[next_spill_idx])
-                        
+                    spill_location_dict[inst.shared_offset] = new_reg
+                    spill_store_dict[inst.shared_offset] = []
+                                            
+                if new_reg:
                     rename_registers_inst(block.instructions[start_idx:next_spill_idx], {spill_reg.name:new_reg}, update_dest = False)
                     paired_inst.dest = Register(new_reg)
-
+                    spill_store_dict[inst.shared_offset].append(inst)
+                    
             barrier_tracker.update_flags(inst.flags)
+            
+        for inst in to_remove_list:
+            print("Remove: %s" % inst)
+            program.ast.remove(inst)
+            block.instructions.remove(inst)
+        
+        analyze_block_liveness(block)
+        pprint(block.instructions)
+        pprint(spill_store_dict)
+        
+        #for offset in spill_store_dict:
+        #    if not spill_store_dict[offset]:
+        #        continue
+                
+        #    for inst in spill_store_dict[offset][:-1]:
+        #        print("Remove: %s" % inst)
+        #        flags = (1 << (inst.flags.read_barrier-1))
+        #        inst.next_inst.flags.wait_barrier = inst.next_inst.flags.wait_barrier & ~flags
+        #        inst.next_inst.flags.wait_barrier |= inst.flags.wait_barrier  
+        #        program.ast.remove(inst)
+        #        block.instructions.remove(inst)
+            
+        #    inst = spill_store_dict[offset][-1]
+        #    inst.flags.yield_hint = True
+        #    flags = (1 << (inst.flags.read_barrier-1))
+        #    inst.next_inst.flags.wait_barrier = inst.next_inst.flags.wait_barrier & ~flags
+        #    inst.next_inst.flags.wait_barrier |= inst.flags.wait_barrier
+        
+        analyze_block_liveness(block)
+
+        #for inst in block.instructions:
+        #    pprint(inst.live_in, width=200)
+        #    pprint(inst)
+        #    pprint(inst.live_out, width=200)
+        
+        pprint(spill_store_dict)   
         pprint(block.instructions)
     cfg.create_dot_graph("cfg.dot")
     
@@ -166,15 +284,6 @@ def remove_redundant_spill_instruction(program, spill_addr_register):
         print("[SPILL_OPT] Remove redundant load/store: %s" % repr(inst))        
         program.ast.remove(inst)        
             
-# Skip instructions to avoid spill register calculation
-#passed_addr_comp = False
-#if not passed_addr_comp:
-#    if isinstance(inst, Instruction):
-#        # Check if the instruction is spill register address computation
-#        if inst.opcode.name == 'SHL' and inst.dest == spill_addr_register:
-#            pprint(inst)
-#           passed_addr_comp = True
-#    continue
 
             
             

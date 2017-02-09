@@ -260,10 +260,10 @@ class Cfg(object):
                 #param += 'READ: %s|' % (block.register_reads.items() if block.register_reads else "[]")
                 param += 'FREE: %s|' % (list(block.free_reg))
                 param += 'LIVE_IN: %s|' % (list(block.live_in))
-                if getattr(block, "var_def", False):
-                    param += 'DEF: %s|' % (list(block.var_def))
-                if getattr(block, "var_use", False):
-                    param += 'USE: %s|' % (list(block.var_use))
+                #if getattr(block, "var_def", False):
+                #    param += 'DEF: %s|' % (list(block.var_def))
+                #if getattr(block, "var_use", False):
+                #    param += 'USE: %s|' % (list(block.var_use))
                 if block.sync_point:
                     param += 'SYNC Point: %s|' % block.sync_point
                 if block.break_point:

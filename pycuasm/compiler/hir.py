@@ -114,6 +114,22 @@ class Instruction(object):
     @property
     def reg_store(self):
         return self.opcode.reg_store
+        
+    def has_register(self, reg):
+        if isinstance(reg, str):
+            reg = Register(reg)
+        
+        if self.dest and self.dest == reg:
+            return True
+        
+        for op in self.operands:
+            if isinstance(op, Pointer):
+                return op.register == reg
+            elif isinstance(op, Constant) and op.pointer:
+                return op.pointer.register == reg
+            elif op == reg:
+                return True
+        return False
 
 class SpillInstruction(Instruction):
     pass
@@ -122,11 +138,15 @@ class SpillLoadInstruction(SpillInstruction):
     def __init__(self, flags, opcode, operands=None, condition=None):
         super(SpillInstruction, self).__init__(flags, opcode, operands, condition)
         self.spill_reg = self.dest
+        self.shared_pointer = self.operands[0]
+        self.shared_offset = self.operands[0].offset
     
 class SpillStoreInstruction(SpillInstruction):
     def __init__(self, flags, opcode, operands=None, condition=None):
         super(SpillInstruction, self).__init__(flags, opcode, operands, condition)
         self.spill_reg = self.operands[1]
+        self.shared_pointer = self.operands[0]
+        self.shared_offset = self.operands[0].offset
 
 class Flags(object):
     def __init__(self, wait_barrier, read_barrier, write_barrier, yield_hint, stall):
