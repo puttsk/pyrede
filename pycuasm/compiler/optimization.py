@@ -71,14 +71,21 @@ def find_new_spill_reg(block, available_reg, start_idx, next_spill_idx, avoid_co
     
     return new_reg
         
-def rearrange_spill_instruction(program, spill_register, spill_addr_register, avoid_conflict=True):
-    print("[REG_OPT]: rearrange_spill_instruction ")
+def optimize_spill_register(program, avoid_conflict=True):
+    """
+    Optimize each basic block by renaming spill register to free register. 
+    Therefore, multiple spill values can coexist at the same time. As a result,
+    some spilling instructions and barriers can be removed.       
+    """
+    
+    print("[SPREG_OPT]: optimize_spill_register ")
     
     cfg = Cfg(program)
     cfg.analyze_liveness()
     
     regs_non_32 = set(collect_non_32bit_registers(program))
     regs_32 = set(program.registers) - regs_non_32
+    pprint(program.registers)
 
     # Finding free registers
     for function in cfg.function_blocks:
@@ -99,17 +106,19 @@ def rearrange_spill_instruction(program, spill_register, spill_addr_register, av
     
     block_list = []
     
-    for block in traverse_order:
+    # Pruning block without any spill instruction
+    for block in cfg.blocks:
         if not isinstance(block, BasicBlock):
             continue
             
         if any(isinstance(x, SpillInstruction) for x in block.instructions):
             block_list.append(block)
-            
+                
     for block in block_list:
-    #for block in block_list[:1]:
-        pprint(block.line)
-        pprint(block.instructions)
+    #for block in block_list[1:2]:
+        #pprint(block.__class__)
+        #pprint(block.line)
+        #pprint(block.instructions)
          
         next_inst = None
     
@@ -162,23 +171,25 @@ def rearrange_spill_instruction(program, spill_register, spill_addr_register, av
                     to_remove_list.append(inst)
                     flags = (1 << (inst.flags.read_barrier-1) | 1 << (inst.flags.write_barrier-1))
                     paired_inst.flags.wait_barrier = paired_inst.flags.wait_barrier & ~flags
-                    paired_inst.flags.wait_barrier |= inst.flags.wait_barrier  
+                    paired_inst.flags.wait_barrier |= inst.flags.wait_barrier
+                      
 
                 elif len(available_reg) > 0:
                     new_reg = find_new_spill_reg(block, available_reg, start_idx, next_spill_idx, avoid_conflict)
                     if new_reg:
-                        print(new_reg, spill_reg)
-                        pprint(block.instructions[start_idx:next_spill_idx])
                         available_reg.remove(new_reg)
                         spill_location_dict[inst.shared_offset] = new_reg
                         spill_store_dict[inst.shared_offset] = []
-                        pprint(spill_location_dict)
                     
                 if new_reg:
-                    rename_registers_inst(block.instructions[start_idx:next_spill_idx], {spill_reg.name:new_reg}, update_dest = False)
+                    if next_spill_idx != -1:
+                        rename_registers_inst(block.instructions[start_idx:next_spill_idx], {spill_reg.name:new_reg}, update_dest = False)
+                    else:
+                        rename_registers_inst(block.instructions[start_idx:], {spill_reg.name:new_reg}, update_dest = False)
+
                     inst.dest = Register(new_reg)
                     rename_registers_inst([paired_inst], {spill_reg.name:new_reg}, update_dest = False)
-                                        
+                
             elif isinstance(inst, SpillStoreInstruction):
                 inst_idx = block.instructions.index(inst)
                 start_idx = inst_idx - 1
@@ -199,42 +210,40 @@ def rearrange_spill_instruction(program, spill_register, spill_addr_register, av
                     new_reg = spill_location_dict[inst.shared_offset]
                     # There is no need for this value
                     if not new_reg in inst.live_out:
-                        #pprint(new_reg)
                         spill_location_dict.pop(inst.shared_offset)
                         available_reg.append(new_reg)
                     
                 elif len(available_reg) > 0:
                     new_reg = find_new_spill_reg(block, available_reg, start_idx, next_spill_idx, avoid_conflict)
                     if new_reg:
-                        print(new_reg, spill_reg)
-                        pprint(block.instructions[start_idx:next_spill_idx])
                         available_reg.remove(new_reg)
                         spill_location_dict[inst.shared_offset] = new_reg
                         spill_store_dict[inst.shared_offset] = []  
-                        pprint(spill_location_dict)
                                               
                 if new_reg:
-                    rename_registers_inst(block.instructions[start_idx:next_spill_idx], {spill_reg.name:new_reg}, update_dest = False)
+                    if next_spill_idx != -1:
+                        rename_registers_inst(block.instructions[start_idx+1:next_spill_idx], {spill_reg.name:new_reg}, update_dest = False)
+                    else:
+                        rename_registers_inst(block.instructions[start_idx+1:], {spill_reg.name:new_reg}, update_dest = False)
                     paired_inst.dest = Register(new_reg)
                     spill_store_dict[inst.shared_offset].append(inst)
-                    
+                
+            #pprint(spill_location_dict)
             barrier_tracker.update_flags(inst.flags)
             
         for inst in to_remove_list:
-            print("[REG_OPT] Remove: %s" % inst)
+            print("[SPREG_OPT] Remove: %x: %s" % (inst.addr, inst))
             program.ast.remove(inst)
             block.instructions.remove(inst)
         
         analyze_block_liveness(block)
-        #pprint(block.instructions)
-        #pprint(spill_store_dict)
         
         for offset in spill_store_dict:
             if not spill_store_dict[offset]:
                 continue
                 
             for inst in spill_store_dict[offset][:-1]:
-                print("[REG_OPT] Remove: %s" % inst)
+                print("[SPREG_OPT] Remove: %x: %s" % (inst.addr, inst))
                 flags = (1 << (inst.flags.read_barrier-1))
                 inst.next_inst.flags.wait_barrier = inst.next_inst.flags.wait_barrier & ~flags
                 inst.next_inst.flags.wait_barrier |= inst.flags.wait_barrier  
@@ -244,24 +253,24 @@ def rearrange_spill_instruction(program, spill_register, spill_addr_register, av
             inst = spill_store_dict[offset][-1]
             inst.flags.yield_hint = True
             flags = (1 << (inst.flags.read_barrier-1))
-            inst.next_inst.flags.wait_barrier = inst.next_inst.flags.wait_barrier & ~flags
-            inst.next_inst.flags.wait_barrier |= inst.flags.wait_barrier
+            if inst.next_inst:
+                inst.next_inst.flags.wait_barrier = inst.next_inst.flags.wait_barrier & ~flags
+                inst.next_inst.flags.wait_barrier |= inst.flags.wait_barrier
+        
+        #pprint(block.instructions)
         
         analyze_block_liveness(block)
 
-        #for inst in block.instructions:
-        #    pprint(inst.live_in, width=200)
-        #    pprint(inst)
-        #    pprint(inst.live_out, width=200)
-        
-        #pprint(spill_store_dict)   
-        #pprint(block.instructions)
     cfg.create_dot_graph("cfg.dot")
     
     program.update()
         
 def remove_redundant_spill_instruction(program, spill_addr_register):
-    # Removing redundant spill load/store. The current implementation only work with 32-bit spill
+    """
+    Removing redundant spill load/store. The current implementation only work with 32-bit spill
+    This optimization track the current value of the spill register and 
+    remove unneccessary spill load/store.
+    """
     to_remove_list = []
     prev_spill_inst = None        
     for inst in program.ast:
@@ -318,7 +327,59 @@ def remove_redundant_spill_instruction(program, spill_addr_register):
         print("[SPILL_OPT] Remove redundant load/store: %s" % repr(inst))        
         program.ast.remove(inst)        
             
-
-            
-            
+def hoist_spill_instruction(program):
+    print("[SPINT_OPT]: hoist_spill_instruction ")
+    
+    cfg = Cfg(program)
+    cfg.analyze_liveness()
+    
+    block_list = []
         
+    # Pruning block without any spill instruction
+    for block in cfg.blocks:
+        if not isinstance(block, BasicBlock):
+            continue
+            
+        if any(isinstance(x, SpillInstruction) for x in block.instructions):
+            block_list.append(block)
+                
+    for block in block_list:
+    #for block in block_list[23:24]:
+        pprint(block.line)
+        pprint(block.instructions)
+        for inst in block.instructions:
+            if isinstance(inst, SpillLoadInstruction):
+                block_idx =  block.instructions.index(inst)
+                ast_idx =  program.ast.index(inst)
+                
+                for rev_inst in reversed(block.instructions[:block_idx]):
+                    target_block_idx = 0
+                    # Found an instruction that uses the spill register or other spill instruction
+                    # This location is the earliest the load can happen
+                    if rev_inst.has_register(inst.spill_reg) or isinstance(rev_inst, SpillLoadInstruction):
+                        target_block_idx =  block.instructions.index(rev_inst) + 1
+                        break
+                    elif isinstance(rev_inst, SpillStoreInstruction):
+                        if rev_inst.spill_reg == inst.spill_reg:
+                            target_block_idx =  block.instructions.index(rev_inst) + 1
+                            break
+                        else:
+                            print(inst, rev_inst)
+                            print(inst.spill_reg, rev_inst.spill_reg)
+                            continue
+                    
+                target_ast_idx = program.ast.index(block.instructions[target_block_idx])
+                
+                if target_ast_idx < ast_idx:    
+                    block.instructions.insert(target_block_idx, block.instructions.pop(block_idx))
+                    program.ast.insert(target_ast_idx, program.ast.pop(ast_idx))
+                
+                    print("[SPINT_OPT]: Move %s from %d to %d" % (inst, ast_idx, target_ast_idx))
+                
+        pprint(block.instructions)
+    
+    program.update()
+                                        
+                    
+                        
+    

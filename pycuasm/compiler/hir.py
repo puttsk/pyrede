@@ -137,9 +137,12 @@ class SpillInstruction(Instruction):
 class SpillLoadInstruction(SpillInstruction):
     def __init__(self, flags, opcode, operands=None, condition=None):
         super(SpillInstruction, self).__init__(flags, opcode, operands, condition)
-        self.spill_reg = self.dest
         self.shared_pointer = self.operands[0]
         self.shared_offset = self.operands[0].offset
+        
+    @property
+    def spill_reg(self):
+        return self.dest
     
 class SpillStoreInstruction(SpillInstruction):
     def __init__(self, flags, opcode, operands=None, condition=None):

@@ -183,7 +183,7 @@ class Cfg(object):
         """
         self.__blocks = []
         self.__return_blocks = []
-        self.__fuction_blocks = {}
+        self.__function_blocks = {}
         if program:
             self.update(program)
     
@@ -200,7 +200,7 @@ class Cfg(object):
     
     @property
     def function_blocks(self):
-        return self.__fuction_blocks
+        return self.__function_blocks
     
     @staticmethod
     def get_traverse_id():
@@ -242,7 +242,7 @@ class Cfg(object):
         self.__blocks.append(block)
     
     def add_function(self, name, block):
-        self.__fuction_blocks[name] = block
+        self.__function_blocks[name] = block
     
     def create_dot_graph(self, outfile):
         """ Generating dot file representing the CFG
@@ -257,9 +257,10 @@ class Cfg(object):
                 param = '<label> %s|' % (block.label if block.label else hex(block.instructions[0].addr))
                 #param += 'LEVEL: %d|' % getattr(block, 'visited_level', -1) 
                 param += 'LINE: %d|' % (block.line)
+                param += 'ADDR: %x|' % (block.instructions[0].addr)
                 #param += 'READ: %s|' % (block.register_reads.items() if block.register_reads else "[]")
-                param += 'FREE: %s|' % (list(block.free_reg))
-                param += 'LIVE_IN: %s|' % (list(block.live_in))
+                #param += 'FREE: %s|' % (list(block.free_reg))
+                #param += 'LIVE_IN: %s|' % (list(block.live_in))
                 #if getattr(block, "var_def", False):
                 #    param += 'DEF: %s|' % (list(block.var_def))
                 #if getattr(block, "var_use", False):
@@ -273,7 +274,7 @@ class Cfg(object):
                 param += "{%s}" % block.get_dot_node()
                 #param += '| DEF: %s' % (list(block.var_def) if block.var_def else "[]")
                 #param += '| WRITE: %s' % (block.register_writes.items() if block.register_writes else "[]")
-                param += '| LIVE_OUT: %s' % (list(block.live_out))
+                #param += '| LIVE_OUT: %s' % (list(block.live_out))
                 if block.condition:
                     param += "|<branch> %s" % block.instructions[-1].opcode
                 
@@ -520,5 +521,67 @@ class Cfg(object):
                 for node in sorted_blocks:
                     if node.old_live_in != node.live_in:
                         converge = False    
-   
-    
+
+        
+        inspect_blocks = [self.blocks[0]]
+
+        call_live_in = dict.fromkeys(self.__function_blocks.keys(), set())
+        call_live_out = dict.fromkeys(self.__function_blocks.keys(), set())
+        
+        while inspect_blocks:
+            target_block = inspect_blocks.pop() 
+                            
+            traverse_list = Cfg.generate_breadth_first_order(target_block)
+            call_list = []
+            return_list = []
+            
+            for block in traverse_list:
+                if isinstance(block, CallBlock):
+                    call_live_in[block.target_function] |= block.live_in
+                    call_live_out[block.target_function] |= block.live_out
+                    if not block.target_function in call_list:
+                        call_list.append(block.target_function)
+                    if not self.__function_blocks[block.target_function] in inspect_blocks:                            
+                        inspect_blocks.append(self.__function_blocks[block.target_function])
+                            
+            for function in call_list:
+                traverse_list = Cfg.generate_breadth_first_order(self.__function_blocks[function])
+                for block in traverse_list:
+                    if isinstance(block, ReturnBlock):
+                        block.var_use = block.var_use | call_live_out[function]
+                        if not block in return_list:
+                            return_list.append(block)
+                    
+            
+            for block in return_list:
+                traversed_block = [block]
+                sorted_blocks = [block] 
+                while len(traversed_block) > 0:
+                    curBlock = traversed_block.pop()
+                    # Tag node as visited
+                    setattr(curBlock, 'visited',True)
+                    for pred in curBlock.pred:
+                        if not getattr(pred, 'visited', False):
+                            traversed_block.append(pred)
+                            sorted_blocks.append(pred)
+                
+                # Clean up visited tag
+                for node in self.__blocks:
+                    if not isinstance(node, StartBlock) and getattr(node, 'visited', None):
+                        delattr(node, 'visited')        
+                
+                # Compute live in and out
+                converge = False
+                
+                while not converge:
+                    for node in sorted_blocks:
+                        setattr(node, 'old_live_in', node.live_in.copy())
+                        setattr(node, 'old_live_out', node.live_out.copy()) 
+                        node.live_out = (node.taken.live_in if node.taken else set()) | \
+                                        (node.not_taken.live_in if node.not_taken else set()) 
+                        node.live_in = node.var_use | (node.live_out - node.var_def)
+
+                    converge = True
+                    for node in sorted_blocks:
+                        if node.old_live_in != node.live_in:
+                            converge = False 

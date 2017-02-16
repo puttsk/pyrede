@@ -154,6 +154,8 @@ def compile(args):
         print("[REG_SPILL] Spilled %d registers to shared memory." % (spilled_count))
         
         remove_redundant_spill_instruction(program, Register("R%d" % spill_register_addr_id)) 
+        optimize_spill_register(program, avoid_conflict=not args.no_conflict_avoidance)
+        hoist_spill_instruction(program)
         
     if args.use_local_spill:
         spill_local_memory(program, args.thread_block_size)
@@ -164,12 +166,8 @@ def compile(args):
         else:
             relocate_registers_conflict(program)
         
-    if not args.use_local_spill:
-        rearrange_spill_instruction(program, 
-                    Register("R%d" % spill_register_id) ,
-                    Register("R%d" % spill_register_addr_id),
-                    avoid_conflict=not args.no_conflict_avoidance)    
-            
+    cfg = Cfg(program)
+    cfg.create_dot_graph("cfg.dot")
     program.save(args.output)
     return
     
