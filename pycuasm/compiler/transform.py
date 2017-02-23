@@ -53,8 +53,8 @@ class RelocatableRegister(object):
         self.new_lead_register = new_register
         if self.bits > 32:
             reg_count = int(self.bits / 32)
-            if new_register.id % reg_count != 0:
-                new_register.id = new_register.id - (new_register.id % reg_count)
+            #if new_register.id % reg_count != 0:
+            #    new_register.id = new_register.id - (new_register.id % reg_count)
             for r in range(0, reg_count):
                 self.new_registers.append(Register("R%d" % (new_register.id+r)))
         else:
@@ -62,9 +62,8 @@ class RelocatableRegister(object):
 
 def relocate_registers_conflict(program):
     print("[REG_RELOC] Relocating registers.")
-    
     relocation_space_size = int(program.registers[-1].replace('R','')) + 1
-    relocation_space = [None] * relocation_space_size
+    relocation_space = [None] * (relocation_space_size + 1)
     
     # Creating a list of non 32bit register
     # 64-bit integer and 64-bit floating point use different rules.
@@ -115,7 +114,7 @@ def relocate_registers_conflict(program):
         if not relocation_space[loc]:
             empty_location_list.append(loc)
     
-    #pprint(relocation_space)
+    pprint(relocation_space)
 
     empty_idx = 0
     print("[REG_RELOC] Empty localtion %s" % (empty_location_list))
@@ -172,7 +171,7 @@ def relocate_registers_conflict(program):
                             non_conflict_loc = loc
                             break
 
-                if non_conflict_loc:
+                if non_conflict_loc:                    
                     non_conflict_idx = relocation_space.index(non_conflict_loc)
                     #relocation_space[empty_loc] = copy.copy(relocation_space[non_conflict_idx])
                     #relocation_space[empty_loc].move(Register('R%d' % (empty_loc)))
@@ -218,20 +217,24 @@ def relocate_registers_conflict(program):
                         empty_location_list.pop(0)
                         cont_loc_count += 1
 
-    #pprint(relocation_space)
+    pprint(relocation_space)
+    has_empty_space = False
     for reg_reloc in relocation_space:
+        if not reg_reloc:
+            has_empty_space = True
         if reg_reloc and reg_reloc.new_lead_register:
             for i in range(len(reg_reloc.new_registers)):
                 rename_register(program, reg_reloc.registers[i], reg_reloc.new_registers[i])
 
-    #program.update()
-    #relocate_registers(program)
+    program.update()
+    if has_empty_space:
+        relocate_registers(program)
 
 def relocate_registers(program):
     print("[REG_RELOC] Relocating registers.")
     
     relocation_space_size = int(program.registers[-1].replace('R','')) + 1
-    relocation_space = [None] * relocation_space_size
+    relocation_space = [None] * (relocation_space_size + 1)
     
     # Creating a list of non 32bit register
     # 64-bit integer and 64-bit floating point use different rules.

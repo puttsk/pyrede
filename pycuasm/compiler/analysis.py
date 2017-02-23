@@ -94,9 +94,10 @@ def generate_64bit_spill_candidates(program, exclude_registers=[]):
                 for i in range (0, int(inst.opcode.op_bit/32), 2):
                     dest_list.append(('R%d' % (start_reg_id + i), 'R%d' % (start_reg_id + i + 1)))
             elif "ST" in inst.opcode.name:
-                start_reg_id = int(inst.operands[1].name.replace('R',''))
-                for i in range (0, int(inst.opcode.op_bit/32), 2):
-                    dest_list.append(('R%d' % (start_reg_id + i), 'R%d' % (start_reg_id + i + 1)))
+                if isinstance(inst.operands[1], Register):
+                    start_reg_id = int(inst.operands[1].name.replace('R',''))
+                    for i in range (0, int(inst.opcode.op_bit/32), 2):
+                        dest_list.append(('R%d' % (start_reg_id + i), 'R%d' % (start_reg_id + i + 1)))
             exclude_list += dest_list
     
     list_64bit_registers = [x for x in list_64bit_registers if x not in exclude_list]

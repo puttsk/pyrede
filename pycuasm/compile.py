@@ -49,9 +49,20 @@ def compile(args):
     program.set_constants(sass.constants)
     program.set_header(sass.header)
     
-    print("Register usage: %s" % sorted(program.registers, key=lambda x: int(x.replace('R',''))))
+    print("[COMPILE]: Optimization level: ", args.opt_level)
+    print("[COMPILE]:Register usage: %s" % sorted(program.registers, key=lambda x: int(x.replace('R',''))))
     
     cfg = Cfg(program)
+    
+    # Check argument
+    opt_level = args.opt_level
+    opt_conflict_avoidance = True
+    if args.no_conflict_avoidance or opt_level == 0:
+        opt_conflict_avoidance = False 
+    
+    register_relocation = True
+    if args.no_register_relocation:
+        register_relocation = False
     
     if args.spill_register:
         print("[REG_SPILL] Spilling %d registers to shared memory. Threadblock Size: %d" % (args.spill_register, args.thread_block_size))
@@ -104,7 +115,7 @@ def compile(args):
             reg_candidates = sorted(reg_candidates, key=lambda x: access_dict[x]['read'] +  access_dict[x]['write'])
             spilled_count = spilled_count + 1        
         
-        if not args.no_conflict_avoidance:
+        if opt_conflict_avoidance:
             max_spill_bank = 0
             max_spill_count = 0
             for i in range(4):
@@ -153,19 +164,22 @@ def compile(args):
             
         print("[REG_SPILL] Spilled %d registers to shared memory." % (spilled_count))
         
-        remove_redundant_spill_instruction(program, Register("R%d" % spill_register_addr_id)) 
-        optimize_spill_register(program, avoid_conflict=not args.no_conflict_avoidance)
-        hoist_spill_instruction(program)
+        if opt_level > 0:
+            opt_remove_redundant_spill_inst(program, Register("R%d" % spill_register_addr_id))
+            opt_swap_spill_register(program, avoid_conflict=opt_conflict_avoidance)
+            
+            if opt_level > 1:
+                opt_hoist_spill_instruction(program)
         
     if args.use_local_spill:
         spill_local_memory(program, args.thread_block_size)
     
-    if not args.no_register_relocation:
-        if args.no_conflict_avoidance:
-            relocate_registers(program)
-        else:
+    if register_relocation:
+        if opt_conflict_avoidance:
             relocate_registers_conflict(program)
-        
+        else:
+            relocate_registers(program)
+            
     cfg = Cfg(program)
     cfg.create_dot_graph("cfg.dot")
     program.save(args.output)
