@@ -619,7 +619,8 @@ def spill_register_to_shared(
                     shared_load_inst.flags.write_barrier = barrier_tracker.get_available_flags('w')
                     inst.flags.wait_barrier = inst.flags.wait_barrier | (1 << (shared_load_inst.flags.read_barrier-1) | 1 << (shared_load_inst.flags.write_barrier-1))
                     if isinstance(prev_inst, SpillStoreInstruction):
-                         shared_load_inst.flags.wait_barrier = shared_load_inst.flags.wait_barrier | 0x8 
+                         shared_load_inst.flags.wait_barrier = shared_load_inst.flags.wait_barrier | 0x8
+                    shared_load_inst.condition = inst.condition              
                     program.ast.insert(program.ast.index(inst), shared_load_inst)
                     
             elif isinstance(op, Register):
@@ -633,7 +634,8 @@ def spill_register_to_shared(
                     shared_load_inst.flags.write_barrier = barrier_tracker.get_available_flags('w')
                     inst.flags.wait_barrier = inst.flags.wait_barrier | (1 << (shared_load_inst.flags.read_barrier-1) | 1 << (shared_load_inst.flags.write_barrier-1))
                     if isinstance(prev_inst, SpillStoreInstruction):
-                         shared_load_inst.flags.wait_barrier = shared_load_inst.flags.wait_barrier | 0x8 
+                         shared_load_inst.flags.wait_barrier = shared_load_inst.flags.wait_barrier | 0x8
+                    shared_load_inst.condition = inst.condition 
                     program.ast.insert(program.ast.index(inst), shared_load_inst)
             elif isinstance(op, Constant) and op.pointer:
                 if target_register == op.pointer.register:
@@ -647,6 +649,7 @@ def spill_register_to_shared(
                     inst.flags.wait_barrier = inst.flags.wait_barrier | (1 << (shared_load_inst.flags.read_barrier-1) | 1 << (shared_load_inst.flags.write_barrier-1))
                     if isinstance(prev_inst, SpillStoreInstruction):
                          shared_load_inst.flags.wait_barrier = shared_load_inst.flags.wait_barrier | 0x8 
+                    shared_load_inst.condition = inst.condition
                     program.ast.insert(program.ast.index(inst), shared_load_inst)
         
         if isinstance(inst.dest, Pointer):
@@ -660,7 +663,8 @@ def spill_register_to_shared(
                 shared_load_inst.flags.write_barrier = barrier_tracker.get_available_flags('w')
                 inst.flags.wait_barrier = inst.flags.wait_barrier | (1 << (shared_load_inst.flags.read_barrier-1) | 1 << (shared_load_inst.flags.write_barrier-1))
                 if isinstance(prev_inst, SpillStoreInstruction):
-                        shared_load_inst.flags.wait_barrier = shared_load_inst.flags.wait_barrier | 0x8 
+                        shared_load_inst.flags.wait_barrier = shared_load_inst.flags.wait_barrier | 0x8
+                shared_load_inst.condition = inst.condition                    
                 program.ast.insert(program.ast.index(inst), shared_load_inst)
         elif isinstance(inst.dest, Register):
             if target_register == inst.dest:
@@ -691,6 +695,7 @@ def spill_register_to_shared(
                         inst.flags.stall = 13 
                     inst.flags.yield_hint = False
                 st_inst.flags.read_barrier = barrier_tracker.get_available_flags('r')
+                st_inst.condition = inst.condition
                 program.ast.insert(program.ast.index(inst) + 1, st_inst)
                 # Set wait flag of the next instruction to wait for store instruction to finish
                 inst_next = program.ast[program.ast.index(st_inst) + 1] 

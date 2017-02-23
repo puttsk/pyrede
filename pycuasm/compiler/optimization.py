@@ -355,8 +355,8 @@ def opt_hoist_spill_instruction(program):
                 block_idx =  block.instructions.index(inst)
                 ast_idx =  program.ast.index(inst)
                 
+                target_block_idx = 0
                 for rev_inst in reversed(block.instructions[:block_idx]):
-                    target_block_idx = 0
                     # Found an instruction that uses the spill register or other spill instruction
                     # This location is the earliest the load can happen
                     if rev_inst.has_register(inst.spill_reg) or isinstance(rev_inst, SpillLoadInstruction):
@@ -370,7 +370,7 @@ def opt_hoist_spill_instruction(program):
                             #print(inst, rev_inst)
                             #print(inst.spill_reg, rev_inst.spill_reg)
                             continue
-                    
+                
                 target_ast_idx = program.ast.index(block.instructions[target_block_idx])
                 
                 if target_ast_idx < ast_idx:    

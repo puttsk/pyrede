@@ -49,20 +49,54 @@ def compile(args):
     program.set_constants(sass.constants)
     program.set_header(sass.header)
     
-    print("[COMPILE]: Optimization level: ", args.opt_level)
-    print("[COMPILE]:Register usage: %s" % sorted(program.registers, key=lambda x: int(x.replace('R',''))))
-    
-    cfg = Cfg(program)
-    
     # Check argument
     opt_level = args.opt_level
+    
+    # Default level = 1
     opt_conflict_avoidance = True
-    if args.no_conflict_avoidance or opt_level == 0:
+    opt_remove_redundant_inst = True
+    opt_swap_spill_reg = True
+    opt_hoist_spill_inst = False
+        
+    if opt_level == 0:
+        opt_conflict_avoidance = False
+        opt_remove_redundant_inst = False
+        opt_swap_spill_reg = False
+        opt_hoist_spill_inst = False
+        
+    if opt_level > 0:
+        opt_conflict_avoidance = True
+        opt_remove_redundant_inst = True
+        opt_swap_spill_reg = True
+        if opt_level > 1:
+            opt_hoist_spill_inst = True
+    
+    # Overriding optimization level
+    if args.avoid_conflict == 0: 
         opt_conflict_avoidance = False 
+    
+    if args.avoid_conflict == 1:
+        opt_conflict_avoidance = True
+    
+    if args.swap_spill_reg == 0: 
+        opt_swap_spill_reg = False 
+    
+    if args.swap_spill_reg == 1:
+        opt_swap_spill_reg = True
     
     register_relocation = True
     if args.no_register_relocation:
         register_relocation = False
+    
+    print("[COMPILE]: Optimization level: ", opt_level)
+    print("[COMPILE]: Register conflict avoidance: ", opt_conflict_avoidance)
+    print("[COMPILE]: Remove redundant spill instruction: ", opt_remove_redundant_inst)
+    print("[COMPILE]: Swap spill register: ", opt_swap_spill_reg)
+    print("[COMPILE]: Hoist spill instruction: ", opt_hoist_spill_inst)
+    print("[COMPILE]: Register relocation: ", register_relocation)
+    print("[COMPILE]: Register usage: %s" % sorted(program.registers, key=lambda x: int(x.replace('R',''))))
+    
+    cfg = Cfg(program)
     
     if args.spill_register:
         print("[REG_SPILL] Spilling %d registers to shared memory. Threadblock Size: %d" % (args.spill_register, args.thread_block_size))
@@ -164,12 +198,14 @@ def compile(args):
             
         print("[REG_SPILL] Spilled %d registers to shared memory." % (spilled_count))
         
-        if opt_level > 0:
+        if opt_remove_redundant_inst:
             opt_remove_redundant_spill_inst(program, Register("R%d" % spill_register_addr_id))
+        
+        if opt_swap_spill_reg:
             opt_swap_spill_register(program, avoid_conflict=opt_conflict_avoidance)
             
-            if opt_level > 1:
-                opt_hoist_spill_instruction(program)
+        if opt_hoist_spill_inst:
+            opt_hoist_spill_instruction(program)
         
     if args.use_local_spill:
         spill_local_memory(program, args.thread_block_size)

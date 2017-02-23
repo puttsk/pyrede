@@ -23,7 +23,8 @@ def main():
     parser.add_argument('-O','--opt-level',type=int, help="Specify optimization level", default=1)
     parser.add_argument('--use-local-spill', action='store_true', help="Convert local spill to shared spill", default=False)
     parser.add_argument('--no-register-relocation', action='store_true', default=False, help="Disable register relocation after spilling")
-    parser.add_argument('--no-conflict-avoidance', action='store_true', default=False, help="Disable register conflict avoidance")
+    parser.add_argument('--avoid-conflict', type=int, default=2, help="0: Disable / 1:Enable register conflict avoidance")
+    parser.add_argument('--swap-spill-reg', type=int, default=2, help="0: Disable / 1:Enable spill register swapping")
     
     # Debugging
     parser.add_argument('--cuobjdump', help="Specify an input cuobjdump file. For debugging purpose only when cuobjdume does not exist in the system.")
