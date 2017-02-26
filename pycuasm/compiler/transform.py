@@ -566,6 +566,9 @@ def spill_register_to_shared(
     
     # Assign the spilled register Identifier
     spill_reg_id = program.shared_spill_count
+    # Padding shared memory
+    #spill_offset = spill_reg_id * thread_block_size * 4 + int(math.ceil(program.shared_size/128))*128
+    # No Padding
     spill_offset = spill_reg_id * thread_block_size * 4 + program.shared_size
     program.shared_spill_count += 1
     

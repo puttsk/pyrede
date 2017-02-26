@@ -24,7 +24,7 @@ class Program(object):
             if "SharedSize" in param:
                 match = re.search("(?P<size>\d+)", param)
                 self.shared_size = int(match.group('size'))
-        print("shared_size:" +  str(self.shared_size));
+        #print("shared_size:" +  str(self.shared_size));
     
     def update(self):
         #Update AST and build register table
@@ -221,7 +221,7 @@ class Opcode(object):
                 self.name == 'SHF'
             ):
                 self.op_bit = 32
-                pprint(self)
+                #pprint(self)
         # TODO: This is a quick fix for shift.u64.hi
         if self.name == 'MUFU':
             self.op_bit = 32

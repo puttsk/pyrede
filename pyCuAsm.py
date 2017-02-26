@@ -11,6 +11,8 @@ def main():
     # Compiler operation
     parser.add_argument('-l','--list', action='store_true', default=False ,help="List kernels and symbols in the cubin file")
     parser.add_argument('-e','--extract', action='store_true', default=False, help="Extract a single kernel into an asm file from a cubin. Works much like cuobjdump but outputs in a format that can be re-assembled back into the cubin.")
+    parser.add_argument('-c','--compiler', action='store_true', default=True, help="Compiler and optimize input SASS file. (default)")
+    parser.add_argument('--tuning', action='store_true', default=False, help="Analyse the benefit of register demotion")
     parser.add_argument('-k','--kernel', help="Specify kernel name for extract operation.")
     parser.add_argument('-o','--output', help="Specify output assembly file name.", default="out.sass")
     
@@ -38,7 +40,9 @@ def main():
         Cubin(args.input_file).print_info()
     elif args.extract:
         print("Extracting " + args.input_file)
-        extract(args)        
+        extract(args)
+    elif args.tuning:
+        tuning(args)
     else:
         compile(args)
 
