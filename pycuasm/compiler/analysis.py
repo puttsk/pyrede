@@ -167,7 +167,7 @@ def collect_global_memory_access(program):
     return mem_reg
 
 
-def __update_loop_reg_access(cfg, loop_begin, loop_end, update_factor = 2):
+def __update_loop_reg_access_old(cfg, loop_begin, loop_end, update_factor = 2):
     traverse_order = Cfg.generate_breadth_first_order(loop_begin, loop_end)
     
     if getattr(loop_begin, 'visited_source', False):
@@ -184,7 +184,7 @@ def __update_loop_reg_access(cfg, loop_begin, loop_end, update_factor = 2):
                 block.register_access[k] *= update_factor
 
                             
-def __get_function_reg_access(cfg, function_block):
+def __get_function_reg_access_old(cfg, function_block):
 
     if getattr(function_block, 'register_access', False):
         return copy.copy(function_block.register_access)
@@ -227,7 +227,7 @@ def __get_function_reg_access(cfg, function_block):
     setattr(function_block, 'register_access', reg_access)
     return reg_access
     
-def generate_spill_candidates_cfg(program, cfg, exclude_registers=[]):
+def generate_spill_candidates_cfg_old(program, cfg, exclude_registers=[]):
     # Update all read/write accesses of each register in each BasicBlock
     for block in cfg.blocks:
         if not isinstance(block, BasicBlock):
@@ -310,6 +310,168 @@ def generate_spill_candidates_cfg(program, cfg, exclude_registers=[]):
     reg_candidates = sorted(reg_candidates, key=lambda x: reg_access[Register(x)])
 
     return reg_candidates
+
+def __update_loop_reg_access(cfg, loop_begin, loop_end, reg_access, update_factor = 2):
+    traverse_order = Cfg.generate_breadth_first_order(loop_begin, loop_end)    
+    
+    if getattr(loop_begin, 'visited_source', False):
+        if loop_end in loop_begin.visited_source:
+            return
+        else:
+            loop_begin.visited_source.append(loop_end)
+    else:
+        setattr(loop_begin, 'visited_source', [loop_end])
+    
+    for block in traverse_order:    
+        if getattr(block, 'register_access', False):
+            for k in block.register_access:
+                if k not in reg_access.keys():
+                    reg_access[k] = block.register_access[k] * update_factor
+                else:
+                    reg_access[k] += block.register_access[k] * update_factor
+
+                            
+def __get_function_reg_access(cfg, function_block):
+
+    if getattr(function_block, 'register_access', False):
+        return copy.copy(function_block.register_access)
+        
+    traverse_order = Cfg.generate_breadth_first_order(function_block)
+    traverse_id = Cfg.get_traverse_id()
+    visit_tag = 'visited_level_' + str(traverse_id)
+    visited_tag = 'visited_' + str(traverse_id)
+    
+    reg_access = {}    
+    
+    # Update block level. Set it level to the highest of predecessor level.     
+    results = DFSResult()
+    Cfg.update_block_level(function_block, results, visit_tag)
+        
+    for block in traverse_order:        
+        block_reg_access = {}
+        
+        if not isinstance(block, BasicBlock):
+            continue
+        elif isinstance(block, CallBlock):
+            block_reg_access = __get_function_reg_access(cfg, cfg.function_blocks[block.target_function])
+        else:            
+            block_reg_access = block.register_access
+            
+        for k in block_reg_access:
+            if k not in reg_access.keys():
+                reg_access[k] = block_reg_access[k]
+            else:
+                reg_access[k] += block_reg_access[k]
+
+        if block.taken and getattr(block.taken, visit_tag) < getattr(block, visit_tag):
+            __update_loop_reg_access(cfg, block.taken, block, reg_access)
+    
+        if block.not_taken and getattr(block.not_taken, visit_tag) < getattr(block, visit_tag):
+            __update_loop_reg_access(cfg, block.not_taken, block, reg_access)
+    
+        # Self loop
+        if block.taken and block.taken == block:
+            __update_loop_reg_access(cfg, block.taken, block, reg_access)
+    
+        if block.not_taken and block.not_taken == block:
+            __update_loop_reg_access(cfg, block.taken, block, reg_access)
+    
+    for block in traverse_order:
+        delattr(block, visit_tag)
+    
+    setattr(function_block, 'register_access', reg_access)
+    return reg_access
+    
+def generate_spill_candidates_cfg(program, cfg, exclude_registers=[]):
+    # Update all read/write accesses of each register in each BasicBlock
+    for block in cfg.blocks:
+        if not isinstance(block, BasicBlock):
+            continue
+            
+        reg_read_map = dict.fromkeys(block.registers)
+        for k in reg_read_map:
+            reg_read_map[k] = 0           
+        
+        reg_write_map = dict.fromkeys(block.registers)
+        for k in reg_write_map:
+            reg_write_map[k] = 0
+        
+        reg_access_map = dict.fromkeys(block.registers)
+        
+        for inst in block.instructions:
+            for operand in inst.operands:
+                op = operand
+                if isinstance(op, Pointer):
+                    op = op.register
+                if not isinstance(op, Register) or op.is_special:
+                    continue
+                
+                reg_read_map[op] += 1
+                
+            if inst.opcode.reg_store and isinstance(inst.dest, Register):
+                reg_write_map[inst.dest] += 1
+        
+        for k in reg_access_map:
+            reg_access_map[k] = reg_read_map[k] + reg_write_map[k]
+        
+        setattr(block, 'register_reads', reg_read_map)
+        setattr(block, 'register_writes', reg_write_map)
+        setattr(block, 'register_access', reg_access_map)
+        
+    # Summarize register accesses in each function
+    # Assume that there is no calling loop, e.g. A calls B and B calls A
+    
+    for function in cfg.function_blocks:
+        __get_function_reg_access(cfg, cfg.function_blocks[function])
+        
+    traverse_order = Cfg.generate_breadth_first_order(cfg.blocks[0])
+    traverse_id = Cfg.get_traverse_id()
+    visit_tag = 'visited_level_' + str(traverse_id)
+    visited_tag = 'visited_' + str(traverse_id)
+    
+    for block in traverse_order:
+        if isinstance(block, CallBlock):
+            setattr(block, 'register_access', __get_function_reg_access(cfg, cfg.function_blocks[block.target_function]))
+    
+    # Update block level. Set it level to the highest of predecessor level.     
+    results = DFSResult()
+    Cfg.update_block_level(cfg.blocks[0], results, visit_tag)
+    
+    reg_access = {}
+    # Count register access of each block 
+    for block in traverse_order:
+        if getattr(block, 'register_access', False):
+            block_reg_access = block.register_access
+                
+            for k in block_reg_access:
+                if k not in reg_access.keys():
+                    reg_access[k] = block_reg_access[k]
+                else:
+                    reg_access[k] += block_reg_access[k]
+    
+    # Update the count with loop
+    for block in traverse_order:    
+        if block.taken and getattr(block.taken, visit_tag) < getattr(block, visit_tag):
+            __update_loop_reg_access(cfg, block.taken, block, reg_access)
+    
+        if block.not_taken and getattr(block.not_taken, visit_tag) < getattr(block, visit_tag):
+            __update_loop_reg_access(cfg, block.not_taken, block, reg_access)
+    
+        # Self loop
+        if block.taken and block.taken == block:
+            __update_loop_reg_access(cfg, block.taken, block, reg_access)
+    
+        if block.not_taken and block.not_taken == block:
+            __update_loop_reg_access(cfg, block.taken, block, reg_access)
+            
+    non_32_registers = collect_non_32bit_registers(program)
+    reg_remove = list(non_32_registers) + exclude_registers
+    reg_candidates = sorted(list(set([ x for x in program.registers if x not in reg_remove])), key=lambda x: int(x.replace('R','')))
+
+    reg_candidates = sorted(reg_candidates, key=lambda x: reg_access[Register(x)])
+
+    return reg_candidates
+
 
 def collect_non_32bit_registers(program):
     reg_dict = {}

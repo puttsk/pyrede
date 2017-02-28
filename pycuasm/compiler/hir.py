@@ -338,7 +338,11 @@ class Register(object):
         
         self.carry_bit = 'CC' in self.extension
         self.offset = 0
-        
+
+    @property
+    def register(self):
+        return self.name
+
     @property
     def full(self):
         return "%s%s%s" % (self.name, '.' if self.extension else '', '.'.join(self.extension))

@@ -6,8 +6,17 @@ import json
 JUMP_OPS = ['BRA', 'BRK', 'CONT', 'SYNC']
 CALL_OPS = ['CAL', 'JCAL'] 
 
+class DFSResult:
+    def __init__(self):
+        self.parent = {}
+        self.start_time = {}
+        self.finish_time = {}
+        self.edges = {} # Edge classification for directed graph.
+        self.order = []
+        self.t = 0
+
 class Block(object):
-    def __init__(self, taken=None, not_taken=None):
+    def __init__(self, taken=None, not_taken=None): 
         self.__taken = taken
         self.__not_taken = not_taken
         self.__pred = []
@@ -29,7 +38,8 @@ class Block(object):
     @property
     def pred(self):
         return self.__pred
-        
+    
+
     def get_dot_node(self):
         return self.__repr__()
         
@@ -208,6 +218,43 @@ class Cfg(object):
         return Cfg.__traverse_id
     
     @staticmethod
+    def update_block_level(block, results, tag, level=0, parent=None):
+        results.parent[block] = parent
+        results.t += 1
+        results.start_time[block] = results.t
+        setattr(block, tag, level)
+
+        if block.not_taken:
+            if block.not_taken not in results.parent:
+                Cfg.update_block_level(block.not_taken, results, tag,level=level+1, parent=block)
+            elif block.not_taken not in results.finish_time:
+                pass # back edge
+            elif results.start_time[block] < results.start_time[block.not_taken]:
+                pass # forward edge
+            else:
+                child_level = getattr(block.not_taken, tag)
+                if child_level <= level:
+                    setattr(block.not_taken, tag, level + 1)
+                pass # cross edge
+
+        if block.taken:
+            if block.taken not in results.parent:
+                Cfg.update_block_level(block.taken, results, tag,level=level+1, parent=block)
+            elif block.taken not in results.finish_time:
+                pass # back edge
+            elif results.start_time[block] < results.start_time[block.taken]:
+                pass # forward edge
+            else:
+                child_level = getattr(block.taken, tag)
+                if child_level <= level:
+                    setattr(block.taken, tag, level + 1)
+                pass # cross edge        
+        
+        results.t += 1
+        results.finish_time[block] = results.t
+        results.order.append(block)
+
+    @staticmethod
     def generate_breadth_first_order(start_block, end_block = None):
         traversed_block = [start_block]
         sorted_block = [start_block]
@@ -258,6 +305,7 @@ class Cfg(object):
                 #param += 'LEVEL: %d|' % getattr(block, 'visited_level', -1) 
                 param += 'LINE: %d|' % (block.line)
                 param += 'ADDR: %x|' % (block.instructions[0].addr)
+                #param += 'LVL: %d|' % (getattr(block, 'visited_level_100', 0))
                 #param += 'READ: %s|' % (block.register_reads.items() if block.register_reads else "[]")
                 #param += 'FREE: %s|' % (list(block.free_reg))
                 #param += 'LIVE_IN: %s|' % (list(block.live_in))

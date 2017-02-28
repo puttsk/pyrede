@@ -102,8 +102,8 @@ SASS_GRAMMARS = {
     'STG'    : Grammar('gmem',0xeed8000000000000, allow_pred = True, reg_store = False, rule = r"^$STG$memCache$mem'type' $addr, $r0"),
     'LDS'    : Grammar('smem',0xef48000000000000, allow_pred = True, reg_store = True, rule = r"^$LDS$memCache$mem'type' $r0, $addr"),
     'STS'    : Grammar('smem',0xef58000000000000, allow_pred = True, reg_store = False, rule = r"^$STS$memCache$mem'type' $addr, $r0"),
-    'LDL'    : Grammar('gmem',0xef40000000000000, allow_pred = True, reg_store = True, rule = r"^$LDL$memCache$mem'type' $r0, $addr"),
-    'STL'    : Grammar('gmem',0xef50000000000000, allow_pred = True, reg_store = False, rule = r"^$STL$memCache$mem'type' $addr, $r0"),
+    'LDL'    : Grammar('lmem',0xef40000000000000, allow_pred = True, reg_store = True, rule = r"^$LDL$memCache$mem'type' $r0, $addr"),
+    'STL'    : Grammar('lmem',0xef50000000000000, allow_pred = True, reg_store = False, rule = r"^$STL$memCache$mem'type' $addr, $r0"),
     'LDC'    : Grammar('gmem',0xef90000000000000, allow_pred = True, reg_store = True, rule = r"^$LDC$memCache$mem'type' $r0, $ldc"),
     # Note for ATOM(S).CAS operations the last register needs to be in sequence with the second to last (as it's not en'code'd).
     'ATOM'   : Grammar('gmem',0xed00000000000000, allow_pred = True, reg_store = True, rule = r"^$ATOM'a'om $r0, $addr2, $r20(?:, $r39a)?"),

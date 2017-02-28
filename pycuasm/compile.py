@@ -84,7 +84,7 @@ def compile(args):
             exclude_registers.append(args.exclude_registers)
         
         reg_candidates = generate_spill_candidates_cfg(program, cfg, exclude_registers=exclude_registers)
-        #cfg.create_dot_graph("cfg.dot")
+        cfg.create_dot_graph("cfg.dot")
         #reg_candidates = generate_spill_candidates(program, exclude_registers=exclude_registers)
         pprint(reg_candidates)
         skipped_candidates = []
