@@ -45,7 +45,7 @@ def __get_function_statistic(cfg, function_block):
         
     traverse_order = Cfg.generate_breadth_first_order(function_block)
     traverse_id = Cfg.get_traverse_id()
-    visit_tag = 'visited_level_' + str(traverse_id)
+    visit_tag = 'visited_level_100'# + str(traverse_id)
     visited_tag = 'visited_' + str(traverse_id)
     
     inst_stat = {}
@@ -77,19 +77,12 @@ def __get_function_statistic(cfg, function_block):
                 inst_stat[k].stall += block_inst_stat[k].stall
                 inst_stat[k].visited += block_inst_stat[k].visited
         
-        if block.taken and getattr(block.taken, visit_tag) < getattr(block, visit_tag):
+        if block.taken and block.is_backward_taken: #getattr(block.taken, visit_tag) < getattr(block, visit_tag):
             __update_loop_statistic(cfg, block.taken, block, inst_stat)
     
-        if block.not_taken and getattr(block.not_taken, visit_tag) < getattr(block, visit_tag):
+        if block.not_taken and block.is_backward_not_taken: #getattr(block.not_taken, visit_tag) < getattr(block, visit_tag):
             __update_loop_statistic(cfg, block.not_taken, block, inst_stat)
-        
-        # Self loop
-        if block.taken and block.taken == block:
-            __update_loop_statistic(cfg, block.taken, block, inst_stat)
-    
-        if block.not_taken and block.not_taken == block:
-            __update_loop_statistic(cfg, block.taken, block, inst_stat)
-            
+                    
     for block in traverse_order:
         delattr(block, visit_tag)
     
@@ -128,7 +121,7 @@ def tuning(args):
         stall_count = 0
         
         for inst in [x for x in block.instructions if isinstance(x, Instruction)]:
-            inst_type = inst.opcode.type if inst.opcode.type != 'x32' and inst.opcode.type != 'smem'  and inst.opcode.type != 'lmem' else inst.opcode.name
+            inst_type = inst.opcode.type if inst.opcode.type != 'x32' and inst.opcode.type != 'smem'  else inst.opcode.name
             if not inst_type in inst_stat:
                 inst_stat[inst_type] = InstructionStatistic()
             inst_stat[inst_type].count += 1
@@ -148,7 +141,7 @@ def tuning(args):
     
     traverse_order = Cfg.generate_breadth_first_order(cfg.blocks[0])
     traverse_id = Cfg.get_traverse_id()
-    visit_tag = 'visited_level_' + str(traverse_id)
+    visit_tag = 'visited_level_100' #+ str(traverse_id)
     visited_tag = 'visited_' + str(traverse_id)
     
     for block in traverse_order:
@@ -181,21 +174,12 @@ def tuning(args):
 
     # Update the statistic if there is a loop
     for block in traverse_order:    
-        if block.taken and getattr(block.taken, visit_tag) < getattr(block, visit_tag):
+        if block.taken and block.is_backward_taken: #getattr(block.taken, visit_tag) < getattr(block, visit_tag):
             __update_loop_statistic(cfg, block.taken, block, inst_stat)
     
-        if block.not_taken and getattr(block.not_taken, visit_tag) < getattr(block, visit_tag):
+        if block.not_taken and block.is_backward_not_taken: #getattr(block.not_taken, visit_tag) < getattr(block, visit_tag):
             __update_loop_statistic(cfg, block.not_taken, block, inst_stat)
             
-        # Self loop
-        if block.taken and block.taken == block:
-            print('self')
-            __update_loop_statistic(cfg, block.taken, block, inst_stat)
-    
-        if block.not_taken and block.not_taken == block:
-            print('self')
-            __update_loop_statistic(cfg, block.taken, block, inst_stat)
-
     pprint(inst_stat)
     
     print("=== Program Statistic ===")

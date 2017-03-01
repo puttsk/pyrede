@@ -22,6 +22,9 @@ class Block(object):
         self.__pred = []
         self.condition = None
         
+        self.is_backward_taken = False
+        self.is_backward_not_taken = False
+
         self.var_use = set()
         self.var_def = set()
         self.live_in = set()
@@ -222,33 +225,39 @@ class Cfg(object):
         results.parent[block] = parent
         results.t += 1
         results.start_time[block] = results.t
-        setattr(block, tag, level)
+        cur_level = getattr(block, tag, level)
+        if cur_level <= level:
+            setattr(block, tag, level)
 
         if block.not_taken:
             if block.not_taken not in results.parent:
                 Cfg.update_block_level(block.not_taken, results, tag,level=level+1, parent=block)
             elif block.not_taken not in results.finish_time:
+                block.is_backward_not_taken = True
                 pass # back edge
             elif results.start_time[block] < results.start_time[block.not_taken]:
                 pass # forward edge
             else:
-                child_level = getattr(block.not_taken, tag)
-                if child_level <= level:
-                    setattr(block.not_taken, tag, level + 1)
                 pass # cross edge
+                #child_level = getattr(block.not_taken, tag)
+                #if child_level <= level:
+                #    setattr(block.not_taken, tag, level + 1)
+                #    Cfg.update_block_level(block.not_taken, results, tag,level=level+1, parent=block)
 
         if block.taken:
             if block.taken not in results.parent:
                 Cfg.update_block_level(block.taken, results, tag,level=level+1, parent=block)
             elif block.taken not in results.finish_time:
+                block.is_backward_taken = True
                 pass # back edge
             elif results.start_time[block] < results.start_time[block.taken]:
                 pass # forward edge
             else:
-                child_level = getattr(block.taken, tag)
-                if child_level <= level:
-                    setattr(block.taken, tag, level + 1)
                 pass # cross edge        
+                #child_level = getattr(block.taken, tag)
+                #if child_level <= level:
+                #    setattr(block.taken, tag, level + 1)
+                #    Cfg.update_block_level(block.taken, results, tag,level=level+1, parent=block)
         
         results.t += 1
         results.finish_time[block] = results.t
@@ -305,7 +314,7 @@ class Cfg(object):
                 #param += 'LEVEL: %d|' % getattr(block, 'visited_level', -1) 
                 param += 'LINE: %d|' % (block.line)
                 param += 'ADDR: %x|' % (block.instructions[0].addr)
-                #param += 'LVL: %d|' % (getattr(block, 'visited_level_100', 0))
+                param += 'LVL: %d|' % (getattr(block, 'visited_level_100', 0))
                 #param += 'READ: %s|' % (block.register_reads.items() if block.register_reads else "[]")
                 #param += 'FREE: %s|' % (list(block.free_reg))
                 #param += 'LIVE_IN: %s|' % (list(block.live_in))
@@ -334,21 +343,23 @@ class Cfg(object):
         for block in self.__blocks:
             if block.taken:
                 if block.condition:
-                    nodes += 'block%s:branch -> block%s%s [label="taken", headport="ne", tailport="se"];\n' % (
+                    nodes += 'block%s:branch -> block%s%s [label="taken", headport="ne", tailport="se" %s];\n' % (
                         self.__blocks.index(block),
                         self.__blocks.index(block.taken),
-                        ":label" if getattr(block.taken,'label', False) else "")
+                        ":label" if getattr(block.taken,'label', False) else "",
+                        ", color=blue" if block.is_backward_taken else "")
                 else:
-                    nodes += 'block%s -> block%s;\n' % (self.__blocks.index(block), self.__blocks.index(block.taken))
+                    nodes += 'block%s -> block%s %s;\n' % (self.__blocks.index(block), self.__blocks.index(block.taken),"[color=blue]" if block.is_backward_taken else "")
             if block.not_taken:
                 if block.condition:
-                    nodes += 'block%s:branch -> block%s%s [label="not taken"];\n' % (
+                    nodes += 'block%s:branch -> block%s%s [label="not taken" %s];\n' % (
                         self.__blocks.index(block),
                         self.__blocks.index(block.not_taken), 
-                        ":label" if block.not_taken.label else "")
+                        ":label" if block.not_taken.label else "",
+                        ", color=blue" if block.is_backward_not_taken else "")
                         
                 else:
-                    nodes += 'block%s -> block%s;\n' % (self.__blocks.index(block), self.__blocks.index(block.not_taken))
+                    nodes += 'block%s -> block%s %s;\n' % (self.__blocks.index(block), self.__blocks.index(block.not_taken),"[color=blue]" if block.is_backward_not_taken else "")
                 
         dot = "digraph cfg{labeljust=l; %s }" % nodes
         

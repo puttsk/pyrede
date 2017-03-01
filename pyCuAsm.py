@@ -2,6 +2,7 @@
 
 import argparse
 import pprint
+import sys
 
 from pycuasm import *
 from pycuasm.cubin import Cubin

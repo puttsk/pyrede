@@ -363,19 +363,12 @@ def __get_function_reg_access(cfg, function_block):
             else:
                 reg_access[k] += block_reg_access[k]
 
-        if block.taken and getattr(block.taken, visit_tag) < getattr(block, visit_tag):
+        if block.taken and block.is_backward_taken: #getattr(block.taken, visit_tag) < getattr(block, visit_tag):
             __update_loop_reg_access(cfg, block.taken, block, reg_access)
     
-        if block.not_taken and getattr(block.not_taken, visit_tag) < getattr(block, visit_tag):
+        if block.not_taken and block.is_backward_not_taken: #getattr(block.not_taken, visit_tag) < getattr(block, visit_tag):
             __update_loop_reg_access(cfg, block.not_taken, block, reg_access)
-    
-        # Self loop
-        if block.taken and block.taken == block:
-            __update_loop_reg_access(cfg, block.taken, block, reg_access)
-    
-        if block.not_taken and block.not_taken == block:
-            __update_loop_reg_access(cfg, block.taken, block, reg_access)
-    
+        
     for block in traverse_order:
         delattr(block, visit_tag)
     
@@ -451,19 +444,12 @@ def generate_spill_candidates_cfg(program, cfg, exclude_registers=[]):
     
     # Update the count with loop
     for block in traverse_order:    
-        if block.taken and getattr(block.taken, visit_tag) < getattr(block, visit_tag):
+        if block.taken and block.is_backward_taken: #getattr(block.taken, visit_tag) < getattr(block, visit_tag):
             __update_loop_reg_access(cfg, block.taken, block, reg_access)
     
-        if block.not_taken and getattr(block.not_taken, visit_tag) < getattr(block, visit_tag):
+        if block.not_taken and block.is_backward_not_taken: #getattr(block.not_taken, visit_tag) < getattr(block, visit_tag):
             __update_loop_reg_access(cfg, block.not_taken, block, reg_access)
-    
-        # Self loop
-        if block.taken and block.taken == block:
-            __update_loop_reg_access(cfg, block.taken, block, reg_access)
-    
-        if block.not_taken and block.not_taken == block:
-            __update_loop_reg_access(cfg, block.taken, block, reg_access)
-            
+                
     non_32_registers = collect_non_32bit_registers(program)
     reg_remove = list(non_32_registers) + exclude_registers
     reg_candidates = sorted(list(set([ x for x in program.registers if x not in reg_remove])), key=lambda x: int(x.replace('R','')))
