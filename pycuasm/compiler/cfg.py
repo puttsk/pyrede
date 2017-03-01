@@ -233,31 +233,23 @@ class Cfg(object):
             if block.not_taken not in results.parent:
                 Cfg.update_block_level(block.not_taken, results, tag,level=level+1, parent=block)
             elif block.not_taken not in results.finish_time:
+                # Tag that the edge is backward edge
                 block.is_backward_not_taken = True
-                pass # back edge
             elif results.start_time[block] < results.start_time[block.not_taken]:
                 pass # forward edge
             else:
                 pass # cross edge
-                #child_level = getattr(block.not_taken, tag)
-                #if child_level <= level:
-                #    setattr(block.not_taken, tag, level + 1)
-                #    Cfg.update_block_level(block.not_taken, results, tag,level=level+1, parent=block)
 
         if block.taken:
             if block.taken not in results.parent:
                 Cfg.update_block_level(block.taken, results, tag,level=level+1, parent=block)
             elif block.taken not in results.finish_time:
+                # Tag that the edge is backward edge
                 block.is_backward_taken = True
-                pass # back edge
             elif results.start_time[block] < results.start_time[block.taken]:
                 pass # forward edge
             else:
                 pass # cross edge        
-                #child_level = getattr(block.taken, tag)
-                #if child_level <= level:
-                #    setattr(block.taken, tag, level + 1)
-                #    Cfg.update_block_level(block.taken, results, tag,level=level+1, parent=block)
         
         results.t += 1
         results.finish_time[block] = results.t
@@ -314,7 +306,6 @@ class Cfg(object):
                 #param += 'LEVEL: %d|' % getattr(block, 'visited_level', -1) 
                 param += 'LINE: %d|' % (block.line)
                 param += 'ADDR: %x|' % (block.instructions[0].addr)
-                param += 'LVL: %d|' % (getattr(block, 'visited_level_100', 0))
                 #param += 'READ: %s|' % (block.register_reads.items() if block.register_reads else "[]")
                 #param += 'FREE: %s|' % (list(block.free_reg))
                 #param += 'LIVE_IN: %s|' % (list(block.live_in))

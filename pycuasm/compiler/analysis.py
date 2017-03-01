@@ -324,11 +324,9 @@ def __update_loop_reg_access(cfg, loop_begin, loop_end, reg_access, update_facto
     
     for block in traverse_order:    
         if getattr(block, 'register_access', False):
-            for k in block.register_access:
-                if k not in reg_access.keys():
-                    reg_access[k] = block.register_access[k] * update_factor
-                else:
-                    reg_access[k] += block.register_access[k] * update_factor
+            for k in block.register_access:                
+                block.register_access[k] *= update_factor
+
 
                             
 def __get_function_reg_access(cfg, function_block):
@@ -338,14 +336,20 @@ def __get_function_reg_access(cfg, function_block):
         
     traverse_order = Cfg.generate_breadth_first_order(function_block)
     traverse_id = Cfg.get_traverse_id()
-    visit_tag = 'visited_level_' + str(traverse_id)
-    visited_tag = 'visited_' + str(traverse_id)
+    visit_tag = 'visited_level_' + str(traverse_id) 
     
     reg_access = {}    
     
     # Update block level. Set it level to the highest of predecessor level.     
     results = DFSResult()
     Cfg.update_block_level(function_block, results, visit_tag)
+    
+    for block in traverse_order:
+        if block.taken and block.is_backward_taken: #getattr(block.taken, visit_tag) < getattr(block, visit_tag):
+            __update_loop_reg_access(cfg, block.taken, block, reg_access)
+    
+        if block.not_taken and block.is_backward_not_taken: #getattr(block.not_taken, visit_tag) < getattr(block, visit_tag):
+            __update_loop_reg_access(cfg, block.not_taken, block, reg_access)
         
     for block in traverse_order:        
         block_reg_access = {}
@@ -362,12 +366,6 @@ def __get_function_reg_access(cfg, function_block):
                 reg_access[k] = block_reg_access[k]
             else:
                 reg_access[k] += block_reg_access[k]
-
-        if block.taken and block.is_backward_taken: #getattr(block.taken, visit_tag) < getattr(block, visit_tag):
-            __update_loop_reg_access(cfg, block.taken, block, reg_access)
-    
-        if block.not_taken and block.is_backward_not_taken: #getattr(block.not_taken, visit_tag) < getattr(block, visit_tag):
-            __update_loop_reg_access(cfg, block.not_taken, block, reg_access)
         
     for block in traverse_order:
         delattr(block, visit_tag)
@@ -420,7 +418,6 @@ def generate_spill_candidates_cfg(program, cfg, exclude_registers=[]):
     traverse_order = Cfg.generate_breadth_first_order(cfg.blocks[0])
     traverse_id = Cfg.get_traverse_id()
     visit_tag = 'visited_level_' + str(traverse_id)
-    visited_tag = 'visited_' + str(traverse_id)
     
     for block in traverse_order:
         if isinstance(block, CallBlock):
@@ -429,8 +426,17 @@ def generate_spill_candidates_cfg(program, cfg, exclude_registers=[]):
     # Update block level. Set it level to the highest of predecessor level.     
     results = DFSResult()
     Cfg.update_block_level(cfg.blocks[0], results, visit_tag)
-    
+
     reg_access = {}
+
+    # Update the count with loop
+    for block in traverse_order:    
+        if block.taken and block.is_backward_taken: #getattr(block.taken, visit_tag) < getattr(block, visit_tag):
+            __update_loop_reg_access(cfg, block.taken, block, reg_access)
+    
+        if block.not_taken and block.is_backward_not_taken: #getattr(block.not_taken, visit_tag) < getattr(block, visit_tag):
+            __update_loop_reg_access(cfg, block.not_taken, block, reg_access)
+    
     # Count register access of each block 
     for block in traverse_order:
         if getattr(block, 'register_access', False):
@@ -442,14 +448,7 @@ def generate_spill_candidates_cfg(program, cfg, exclude_registers=[]):
                 else:
                     reg_access[k] += block_reg_access[k]
     
-    # Update the count with loop
-    for block in traverse_order:    
-        if block.taken and block.is_backward_taken: #getattr(block.taken, visit_tag) < getattr(block, visit_tag):
-            __update_loop_reg_access(cfg, block.taken, block, reg_access)
-    
-        if block.not_taken and block.is_backward_not_taken: #getattr(block.not_taken, visit_tag) < getattr(block, visit_tag):
-            __update_loop_reg_access(cfg, block.not_taken, block, reg_access)
-                
+            
     non_32_registers = collect_non_32bit_registers(program)
     reg_remove = list(non_32_registers) + exclude_registers
     reg_candidates = sorted(list(set([ x for x in program.registers if x not in reg_remove])), key=lambda x: int(x.replace('R','')))
