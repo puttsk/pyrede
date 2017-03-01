@@ -19,13 +19,7 @@ from pycuasm.compiler.optimization import *
 
 from pycuasm.tool import *
 
-            
-def compile(args):
-    sass = Sass(args.input_file)
-    program = sass_parser.parse(sass.sass_raw, lexer=sass_lexer)
-    program.set_constants(sass.constants)
-    program.set_header(sass.header)
-    
+def compiler_program(program, args):
     # Check argument
     opt_level = args.opt_level
     
@@ -193,8 +187,14 @@ def compile(args):
         else:
             relocate_registers(program)
             
-    cfg = Cfg(program)
-    cfg.create_dot_graph("cfg.dot")
+def compile(args):
+    sass = Sass(args.input_file)
+    program = sass_parser.parse(sass.sass_raw, lexer=sass_lexer)
+    program.set_constants(sass.constants)
+    program.set_header(sass.header)
+    
+    compiler_program(program, args)
+            
     program.save(args.output)
     return
     

@@ -32,8 +32,12 @@ def main():
     # Debugging
     parser.add_argument('--cuobjdump', help="Specify an input cuobjdump file. For debugging purpose only when cuobjdume does not exist in the system.")
     
+    # tuning
+    parser.add_argument('--local-sass', type=str, help="SASS code with local spilling")
+    
     # Default argument
     parser.add_argument('input_file', type=str)
+    
     args = parser.parse_args()
 
     #List kernels and symbol inside the cubin file

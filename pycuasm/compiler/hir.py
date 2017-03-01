@@ -172,6 +172,14 @@ class Flags(object):
         self.yield_hint = True if yield_hint == 'Y' else False
         self.stall = int(stall, 16)
     
+    @property
+    def wait_barrier_list(self):
+        b_list = []
+        for barrier in range(6):
+            if self.wait_barrier & (1 << barrier):
+                b_list.append(barrier + 1)
+        return b_list
+    
     def __str__(self):
         return "%s:%s:%s:%s:%x" % (
             ("%02x" % self.wait_barrier) if self.wait_barrier != 0 else '--',
@@ -198,8 +206,6 @@ class Opcode(object):
         
         if self.name not in SASS_GRAMMARS:
             raise ValueError("Invalid instruction: " + opcode)
-
-        self.grammar = SASS_GRAMMARS[self.name]
         
         # Setting operation bit
         if self.name == 'XMAD':
@@ -231,6 +237,10 @@ class Opcode(object):
     
     def __repr__(self):
         return self.full 
+    
+    @property
+    def grammar(self):
+        return SASS_GRAMMARS[self.name]
     
     @property
     def full(self):

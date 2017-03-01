@@ -1,4 +1,6 @@
 import math
+import os
+import contextlib
 
 from pprint import pprint
 from collections import namedtuple
@@ -9,15 +11,23 @@ from pycuasm.compiler.sass import Sass
 from pycuasm.compiler.hir import *
 from pycuasm.compiler.cfg import *
 
+from pycuasm.compile import *
+
 THREADS_PER_WARP = 32
 WARPS_PER_SM = 64
-WARP_ALLOC_UNIT = 2
 THREAD_BLOCK_PER_SM = 32
 REGISTERS_PER_SM = 65536
 REGISTERS_PER_BLOCK = 32768
-REGISTER_ALLOC_UNIT = 256
 SHARED_MEM_PER_SM = 98304
 SHARED_MEM_PER_BLOCK = 49152
+
+WARP_ALLOC_UNIT = 2
+REGISTER_ALLOC_UNIT = 256
+
+GLOBAL_ACCESS_STALL = 200
+SHARED_ACCESS_STALL = 20
+
+ProgramStatistic = namedtuple('ProgramStatistic', ['stall', 'inst_stat'])
 
 class InstructionStatistic(object):
     def __init__(self):
@@ -26,6 +36,98 @@ class InstructionStatistic(object):
         self.visited = 0
     def __repr__(self):
         return str(self.__dict__) 
+
+def compute_occupancy(register_size, shared_size, threadblock_size):
+    
+    # Compute thread block limit
+    warps_per_block = int(math.ceil(threadblock_size / THREADS_PER_WARP))
+    warps_per_block = int(math.ceil(warps_per_block / WARP_ALLOC_UNIT)) * WARP_ALLOC_UNIT 
+    limit_block_alloc_per_sm = int(math.floor(math.floor(WARPS_PER_SM / warps_per_block) / WARP_ALLOC_UNIT) * WARP_ALLOC_UNIT) 
+    
+    # Compute register limit
+    registers_per_warp = register_size * THREADS_PER_WARP
+    warp_register_alloc = int(math.ceil(registers_per_warp / REGISTER_ALLOC_UNIT)) * REGISTER_ALLOC_UNIT # Size of register allocation is based on allocation granularity
+    registers_per_block = warps_per_block * warp_register_alloc
+    limit_reg_alloc_per_sm = int(math.floor(math.floor(REGISTERS_PER_SM / registers_per_block) / WARP_ALLOC_UNIT) * WARP_ALLOC_UNIT) 
+    
+    # Compute shared memory limit
+    limit_shared_alloc_per_sm = int(math.floor(SHARED_MEM_PER_SM / shared_size)) if shared_size > 0 else THREAD_BLOCK_PER_SM
+    
+    max_thread_block_count = min([limit_block_alloc_per_sm, limit_reg_alloc_per_sm, limit_shared_alloc_per_sm]) 
+    max_occupancy = max_thread_block_count * warps_per_block / WARPS_PER_SM
+
+    #print("Block limited by threadblock: ", limit_block_alloc_per_sm)
+    #print("Block limited by register: ", limit_reg_alloc_per_sm)
+    #print("Block limited by shared memory: ", limit_shared_alloc_per_sm)
+
+    limiters = []
+    max_block = 0
+    
+    if limit_reg_alloc_per_sm <= min([limit_block_alloc_per_sm, limit_shared_alloc_per_sm]):
+        limiters.append('register')
+        max_block = limit_reg_alloc_per_sm
+    if limit_block_alloc_per_sm <= min([limit_reg_alloc_per_sm, limit_shared_alloc_per_sm]):
+        limiters.append('block')
+        max_block = limit_block_alloc_per_sm
+    if limit_shared_alloc_per_sm <= min([limit_reg_alloc_per_sm, limit_block_alloc_per_sm]):
+        limiters.append('shared')
+        max_block = limit_shared_alloc_per_sm
+        
+    return max_occupancy, max_block, limiters
+
+def tune_occupancy(program, register_size, shared_size, threadblock_size):
+    config = []
+    
+    print("=== Program Statistic ===")
+    print("Static Instruction Count: ", len([x for x in program.ast if isinstance(x, Instruction)]))
+    print("Register Usage: ", register_size)
+    print("Shared Memory Usage: ", shared_size)
+    print("Threadblock Size: ", threadblock_size)
+    
+    max_occupancy, max_block, limiters = compute_occupancy(register_size, shared_size, threadblock_size)
+    
+    print("Maximum occupancy: ", max_occupancy)
+    print()
+    # If register allocation is limiting factor
+    if 'register' in limiters:
+        tunable = True
+        target_block_per_sm = max_block
+        while tunable:
+            # Find possible configuration
+            warps_per_block = int(math.ceil(threadblock_size / THREADS_PER_WARP))
+            warps_per_block = int(math.ceil(warps_per_block / WARP_ALLOC_UNIT)) * WARP_ALLOC_UNIT
+            # Try to increase number of block per SM by 2
+            target_block_per_sm = (target_block_per_sm + 2)
+            # Per thread allocation
+            target_reg_usage = int(math.floor(REGISTERS_PER_SM / target_block_per_sm))
+            # Per warp allocation
+            target_reg_usage = int(math.floor(target_reg_usage / warps_per_block / REGISTER_ALLOC_UNIT) * REGISTER_ALLOC_UNIT)
+            # Per thread allocation
+            target_reg_usage = int(target_reg_usage / THREADS_PER_WARP)
+            register_to_demote = register_size - target_reg_usage + 2
+            shared_required = register_to_demote * threadblock_size * 4
+            
+            max_occupancy, max_block, limiters = compute_occupancy(target_reg_usage, shared_required + shared_size, threadblock_size)
+            
+            if 'register' in limiters: 
+                shared_avail = min([int(math.floor(SHARED_MEM_PER_SM / target_block_per_sm)) - shared_size, SHARED_MEM_PER_BLOCK])  
+                if shared_avail < shared_required:
+                    tunable = False
+                else:
+                    config.append(register_to_demote)
+            else:
+                tunable = False                
+            
+            if tunable:
+                print("=== New Config ===")
+                print("Target register usage: ", target_reg_usage)
+                print("Number of registers for demotion: ", register_to_demote)
+                print("Shared memory requirement: ", shared_required)
+                print("Availabel shared memory: ", shared_avail)
+                print("Maximum Occupancy: ", max_occupancy)
+                print()
+        
+    return config
 
 def __update_loop_statistic(cfg, loop_begin, loop_end, inst_stat, update_factor = 2):
     traverse_order = Cfg.generate_breadth_first_order(loop_begin, loop_end)
@@ -44,6 +146,7 @@ def __update_loop_statistic(cfg, loop_begin, loop_end, inst_stat, update_factor 
                 block.inst_stat[k].stall *= update_factor
                 block.inst_stat[k].count *= update_factor
                 block.inst_stat[k].visited += 1
+            block.stall_count *= update_factor
 
 def __get_function_statistic(cfg, function_block):
     if getattr(function_block, 'inst_stat', False):
@@ -89,91 +192,24 @@ def __get_function_statistic(cfg, function_block):
                 inst_stat[k].count += block_inst_stat[k].count
                 inst_stat[k].stall += block_inst_stat[k].stall
                 inst_stat[k].visited += block_inst_stat[k].visited
-                        
+        
+        stall_count += block.stall_count
+        
     setattr(function_block, 'inst_stat', inst_stat)
+    setattr(function_block, 'stall_count', stall_count)
     return inst_stat
 
-def tune_occupancy(program, register_size, shared_size, threadblock_size):
-    config = []
-    
-    # Compute thread block limit
-    warps_per_block = int(math.ceil(threadblock_size / THREADS_PER_WARP))
-    warps_per_block = int(math.ceil(warps_per_block / WARP_ALLOC_UNIT)) * WARP_ALLOC_UNIT 
-    limit_block_alloc_per_sm = int(math.floor(WARPS_PER_SM / warps_per_block)) 
-    
-    # Compute register limit
-    registers_per_warp = register_size * THREADS_PER_WARP
-    warp_register_alloc = int(math.ceil(registers_per_warp / REGISTER_ALLOC_UNIT)) * REGISTER_ALLOC_UNIT # Size of register allocation is based on allocation granularity
-    registers_per_block = warps_per_block * warp_register_alloc
-    limit_reg_alloc_per_sm = int(math.floor(REGISTERS_PER_SM / registers_per_block)) 
-    
-    # Compute shared memory limit
-    limit_shared_alloc_per_sm = int(math.floor(SHARED_MEM_PER_SM / shared_size)) if shared_size > 0 else THREAD_BLOCK_PER_SM
-    
-    max_thread_block_count = min([limit_block_alloc_per_sm, limit_reg_alloc_per_sm, limit_shared_alloc_per_sm]) 
-    max_occupancy = max_thread_block_count * warps_per_block / WARPS_PER_SM
-
-    print("=== Program Statistic ===")
-    print("Static Instruction Count: ", len([x for x in program.ast if isinstance(x, Instruction)]))
-    print("Register Usage: ", register_size)
-    print("Shared Memory Usage: ", shared_size)
-    print("Threadblock Size: ", threadblock_size)
-    
-    print("Block limited by threadblock: ", limit_block_alloc_per_sm)
-    print("Block limited by register: ", limit_reg_alloc_per_sm)
-    print("Block limited by shared memory: ", limit_shared_alloc_per_sm)
-    print("Maximum occupancy: ", max_occupancy)
-    
-    # If register allocation is limiting factor
-    if limit_reg_alloc_per_sm < min([limit_block_alloc_per_sm, limit_shared_alloc_per_sm]):
-        tunable = True
-        target_block_per_sm = limit_reg_alloc_per_sm
-        while tunable:
-            # Find possible configuration
-            # Try to increase number of block per SM by 2
-            target_block_per_sm = (target_block_per_sm + 2)
-            # Per thread allocation
-            target_reg_usage = int(math.floor(REGISTERS_PER_SM / target_block_per_sm))
-            # Per warp allocation
-            target_reg_usage = int(math.floor(target_reg_usage / warps_per_block / REGISTER_ALLOC_UNIT) * REGISTER_ALLOC_UNIT)
-            # Per thread allocation
-            target_reg_usage = int(target_reg_usage / THREADS_PER_WARP)
-            register_to_demote = register_size - target_reg_usage + 2
-            shared_required = register_to_demote * threadblock_size * 4
-            shared_avail = min([int(math.floor(SHARED_MEM_PER_SM / target_block_per_sm)) - shared_size, SHARED_MEM_PER_BLOCK])  
-            if shared_avail < shared_required:
-                tunable = False
-            else:
-                config.append(register_to_demote)
-            
-            if tunable:
-                print("=== New Config ===")
-                print("Target register usage: ", target_reg_usage)
-                print("Number of registers for demotion: ", register_to_demote)
-                print("Shared memory requirement: ", shared_required)
-                print("Availabel shared memory: ", shared_avail)
-                print("Maximum Occupancy: ", target_block_per_sm * warps_per_block / WARPS_PER_SM)
-        
-    return config
-
-def tuning(args):
-    sass = Sass(args.input_file)
-    program = sass_parser.parse(sass.sass_raw, lexer=sass_lexer)
-    program.set_constants(sass.constants)
-    program.set_header(sass.header)
-    program.update()
-
-    cfg = Cfg(program)
-    
-    config =  tune_occupancy(program, len(program.registers), program.shared_size, args.thread_block_size)
-    
+def collect_program_statistic(program):
+    cfg = Cfg(program)    
     # Update instruction statistic of each cfg block
     for block in cfg.blocks:
         if not isinstance(block, BasicBlock):
             continue
-        
+                
         inst_stat = {}
         stall_count = 0
+        
+        barrier = [None] * 7
         
         for inst in [x for x in block.instructions if isinstance(x, Instruction)]:
             inst_type = inst.opcode.type if inst.opcode.type != 'x32' else inst.opcode.name
@@ -182,6 +218,29 @@ def tuning(args):
             inst_stat[inst_type].count += 1
             inst_stat[inst_type].stall += inst.flags.stall
             inst_stat[inst_type].visited += 1
+            
+            if inst.flags.read_barrier > 0:
+                barrier[inst.flags.read_barrier] = [inst, inst.flags.stall]
+            
+            if inst.flags.write_barrier > 0:
+                barrier[inst.flags.write_barrier] = [inst, inst.flags.stall]
+            
+            for i in range(7):
+                if barrier[i]:
+                    barrier[i][1] += inst.flags.stall 
+            
+            for wait in inst.flags.wait_barrier_list:
+                if barrier[wait]:
+                    if barrier[wait][0].opcode.type == 'lmem' or barrier[wait][0].opcode.type == 'gmem':
+                        if barrier[wait][1] < GLOBAL_ACCESS_STALL:
+                            stall_count += GLOBAL_ACCESS_STALL - barrier[wait][1]
+                            inst_stat[barrier[wait][0].opcode.type].stall += GLOBAL_ACCESS_STALL - barrier[wait][1]                      
+                    elif barrier[wait][0].opcode.type == 'smem':
+                        if barrier[wait][1] < SHARED_ACCESS_STALL:
+                            stall_count += SHARED_ACCESS_STALL - barrier[wait][1]
+                            inst_stat[barrier[wait][0].opcode.type].stall += SHARED_ACCESS_STALL - barrier[wait][1]
+
+                    barrier[wait] = None
             
             stall_count += inst.flags.stall
         
@@ -207,6 +266,7 @@ def tuning(args):
     Cfg.update_block_level(cfg.blocks[0], results, visit_tag)
 
     inst_stat = {}
+    stall_count = 0
     cfg.create_dot_graph('cfg.dot')
 
     # Update the statistic of each loop 
@@ -232,8 +292,54 @@ def tuning(args):
                     inst_stat[k].stall += block_inst_stat[k].stall
                     inst_stat[k].count += block_inst_stat[k].count
                     inst_stat[k].visited += block_inst_stat[k].visited
-                                
-    pprint(inst_stat)
+            
+            stall_count += block.stall_count
+            
+    return ProgramStatistic(stall_count, inst_stat)
+
+
+def tuning(args):
+    sass = Sass(args.input_file)
+    program = sass_parser.parse(sass.sass_raw, lexer=sass_lexer)
+    program.set_constants(sass.constants)
+    program.set_header(sass.header)
+    program.update()
     
-    #pprint(reg_count)    
+    config =  tune_occupancy(program, len(program.registers), program.shared_size, args.thread_block_size)
+
+    program_stat = {}
+    program_stat['orig'] = collect_program_statistic(program)
+    
+    for conf in config:
+        conf_program = copy.deepcopy(program)
+        print("Collect program statistic with %d register spill" % conf)
+        args.spill_register = int(conf)
+        with open(os.devnull, 'w') as devnull:
+            with contextlib.redirect_stdout(devnull):
+                compiler_program(conf_program, args)        
+        program_stat['spill_' + str(conf)] = collect_program_statistic(conf_program)
+    
+    if args.local_sass:
+        sass_local = Sass(args.local_sass)
+        program = sass_parser.parse(sass_local.sass_raw, lexer=sass_lexer)
+        program.set_constants(sass_local.constants)
+        program.set_header(sass_local.header)
+        program.update()
+        
+        program_stat['local'] = collect_program_statistic(program)
+        
+        local_program = copy.deepcopy(program)
+        args.spill_register = None
+        args.use_local_spill = True
+        local_program = copy.deepcopy(program)
+        print("Collect program statistic with local register spill")
+        with open(os.devnull, 'w') as devnull:
+            with contextlib.redirect_stdout(devnull):
+                compiler_program(local_program, args)
+        program_stat['spill_local'] = collect_program_statistic(local_program)
+    
+    for conf in program_stat:
+        print(conf)
+        pprint(program_stat[conf].stall)
+        pprint(program_stat[conf].inst_stat)
     
