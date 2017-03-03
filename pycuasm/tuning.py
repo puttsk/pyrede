@@ -108,6 +108,7 @@ def tune_occupancy(program, register_size, shared_size, threadblock_size):
             shared_required = register_to_demote * threadblock_size * 4
             
             max_occupancy, max_block, limiters = compute_occupancy(target_reg_usage, shared_required + shared_size, threadblock_size)
+            pprint(max_block)
             
             if 'register' in limiters: 
                 shared_avail = min([int(math.floor(SHARED_MEM_PER_SM / target_block_per_sm)) - shared_size, SHARED_MEM_PER_BLOCK])  
@@ -306,9 +307,12 @@ def tuning(args):
     program.update()
     
     config =  tune_occupancy(program, len(program.registers), program.shared_size, args.thread_block_size)
-
+    
+    occupancy, max_block, limiters = compute_occupancy(len(program.registers), program.shared_size, args.thread_block_size)
     program_stat = {}
+    program_occupancy = {}
     program_stat['orig'] = collect_program_statistic(program)
+    program_occupancy['orig'] = occupancy
     
     for conf in config:
         conf_program = copy.deepcopy(program)
@@ -317,8 +321,9 @@ def tuning(args):
         with open(os.devnull, 'w') as devnull:
             with contextlib.redirect_stdout(devnull):
                 compiler_program(conf_program, args)        
+        occupancy, max_block, limiters = compute_occupancy(len(conf_program.registers), program.shared_size, args.thread_block_size)
         program_stat['spill_' + str(conf)] = collect_program_statistic(conf_program)
-    
+        program_occupancy['spill_' + str(conf)] = occupancy
     if args.local_sass:
         sass_local = Sass(args.local_sass)
         program = sass_parser.parse(sass_local.sass_raw, lexer=sass_lexer)
@@ -326,7 +331,9 @@ def tuning(args):
         program.set_header(sass_local.header)
         program.update()
         
+        occupancy, max_block, limiters = compute_occupancy(len(program.registers), program.shared_size, args.thread_block_size)
         program_stat['local'] = collect_program_statistic(program)
+        program_occupancy['local'] = occupancy
         
         local_program = copy.deepcopy(program)
         args.spill_register = None
@@ -336,10 +343,13 @@ def tuning(args):
         with open(os.devnull, 'w') as devnull:
             with contextlib.redirect_stdout(devnull):
                 compiler_program(local_program, args)
+        occupancy, max_block, limiters = compute_occupancy(len(local_program.registers), program.shared_size, args.thread_block_size)
         program_stat['spill_local'] = collect_program_statistic(local_program)
-    
+        program_occupancy['spill_local'] = occupancy
+        
+    print("configuration\t", "    stall\t", "occupancy\t", "adjusted_stall\t")    
     for conf in program_stat:
-        print(conf)
-        pprint(program_stat[conf].stall)
-        pprint(program_stat[conf].inst_stat)
+        adjusted_stall = program_stat[conf].stall * 1.0/program_occupancy[conf]
+        print ("%13s\t%10d\t%10.3f\t%15.2f\t" % (conf, program_stat[conf].stall, program_occupancy[conf], adjusted_stall))
+        
     
