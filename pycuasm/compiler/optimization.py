@@ -293,34 +293,37 @@ def opt_remove_redundant_spill_inst(program, spill_addr_register):
                     # Both instruction update the value of the same spilled Register
                     # This should be rare
                     if cur_dest.offset == prev_dest.offset:
-                        to_remove_list.append(prev_spill_inst)
-                        inst_idx = program.ast.index(prev_spill_inst)
-                        next_inst = program.ast[inst_idx-1]
-                        if isinstance(next_inst, Instruction):
-                            wait_flag = 1 << (prev_spill_inst.flags.read_barrier-1)
-                            next_inst.flags.wait_barrier = next_inst.flags.wait_barrier & ~wait_flag
+                        if not inst.condition and not prev_spill_inst.condition:
+                            to_remove_list.append(prev_spill_inst)
+                            inst_idx = program.ast.index(prev_spill_inst)
+                            next_inst = program.ast[inst_idx-1]
+                            if isinstance(next_inst, Instruction):
+                                wait_flag = 1 << (prev_spill_inst.flags.read_barrier-1)
+                                next_inst.flags.wait_barrier = next_inst.flags.wait_barrier & ~wait_flag
                 elif isinstance(inst, SpillLoadInstruction) and isinstance(prev_spill_inst, SpillStoreInstruction):
                     cur_dest = inst.operands[0]
                     prev_dest = prev_spill_inst.operands[0]
                     # The current instruction loads the most recent value. No need to load
                     if cur_dest.offset == prev_dest.offset:
-                        to_remove_list.append(inst)
-                        inst_idx = program.ast.index(inst)
-                        next_inst = program.ast[inst_idx+1]
-                        if isinstance(next_inst, Instruction):
-                            wait_flag = 1 << (inst.flags.read_barrier-1) | 1 << (inst.flags.write_barrier-1)
-                            next_inst.flags.wait_barrier = next_inst.flags.wait_barrier & ~wait_flag
+                        if not inst.condition and not prev_spill_inst.condition:
+                            to_remove_list.append(inst)
+                            inst_idx = program.ast.index(inst)
+                            next_inst = program.ast[inst_idx+1]
+                            if isinstance(next_inst, Instruction):
+                                wait_flag = 1 << (inst.flags.read_barrier-1) | 1 << (inst.flags.write_barrier-1)
+                                next_inst.flags.wait_barrier = next_inst.flags.wait_barrier & ~wait_flag
                 elif isinstance(inst, SpillLoadInstruction) and isinstance(prev_spill_inst, SpillLoadInstruction):
                     cur_dest = inst.operands[0]
                     prev_dest = prev_spill_inst.operands[0]
                     # The current instruction loads the most recent value. No need to load
                     if cur_dest.offset == prev_dest.offset:
-                        to_remove_list.append(inst)
-                        inst_idx = program.ast.index(inst)
-                        next_inst = program.ast[inst_idx+1]
-                        if isinstance(next_inst, Instruction):
-                            wait_flag = 1 << (inst.flags.read_barrier-1) | 1 << (inst.flags.write_barrier-1)
-                            next_inst.flags.wait_barrier = next_inst.flags.wait_barrier & ~wait_flag                   
+                        if not inst.condition and not prev_spill_inst.condition:
+                            to_remove_list.append(inst)
+                            inst_idx = program.ast.index(inst)
+                            next_inst = program.ast[inst_idx+1]
+                            if isinstance(next_inst, Instruction):
+                                wait_flag = 1 << (inst.flags.read_barrier-1) | 1 << (inst.flags.write_barrier-1)
+                                next_inst.flags.wait_barrier = next_inst.flags.wait_barrier & ~wait_flag                   
 
             prev_spill_inst = inst
   
