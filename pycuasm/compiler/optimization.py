@@ -382,6 +382,7 @@ def opt_hoist_spill_instruction(program):
                 
                     print("[SPINT_OPT]: Move %s from %d to %d" % (inst, ast_idx, target_ast_idx))
         
+        
         # Finding instruction that is waited for spill instruction barrier
         pair_spill_inst_dict = {}
         for inst in block.instructions:
@@ -389,23 +390,26 @@ def opt_hoist_spill_instruction(program):
                 # Find pair inst 
                 block_idx =  block.instructions.index(inst)
                 p_block_idx = -1
+                p_block_inst = None
+                pprint(inst)
                 for p_inst in block.instructions[block_idx+1:]:
+                    pprint(p_inst)
                     if p_inst.has_register(inst.spill_reg):
                         # Check if barrier match
-                        inst_flag = 0
+                        inst_flags = 0
                         if isinstance(inst, SpillLoadInstruction): 
                             inst_flags = 1 << (inst.flags.read_barrier-1) | 1 << (inst.flags.write_barrier-1)
                         else:
                             inst_flags = 1 << (inst.flags.read_barrier-1) 
-                            
+                           
                         if p_inst.flags.wait_barrier & inst_flags != 0:
-                            p_block_idx = block.instructions.index(p_inst)                       
+                            #p_block_idx = block.instructions.index(p_inst)
+                            p_block_inst = p_inst     
                             break
-                            
-                pair_spill_inst_dict[block_idx] = p_block_idx
-            
+                
+                pair_spill_inst_dict[block_idx] = p_block_inst
+                
             #print(block.instructions.index(inst),inst)
-        
         # Update the barrier to avoid unneccessary wait
         b_tracker = BarrierTracker()
         for inst in block.instructions:
@@ -418,7 +422,10 @@ def opt_hoist_spill_instruction(program):
                     # there is no need to change.  
                     stall_count = 0
                     change_barrier = False
-                    for n_inst in block.instructions[inst_idx+1:pair_spill_inst_dict[inst_idx]]:                    
+                    p_inst_idx = -1
+                    if pair_spill_inst_dict[inst_idx]:
+                        p_inst_idx = block.instructions.index(pair_spill_inst_dict[inst_idx])
+                    for n_inst in block.instructions[inst_idx+1:p_inst_idx]:                    
                         if stall_count > SHARED_MEMORY_STALL:
                             break
                         
@@ -431,7 +438,10 @@ def opt_hoist_spill_instruction(program):
                         
                     if change_barrier:
                         b_tracker_list = copy.copy(b_tracker.barriers)
-                        for n_inst in block.instructions[inst_idx:pair_spill_inst_dict[inst_idx]]:
+                        p_inst_idx = -1
+                        if pair_spill_inst_dict[inst_idx]:
+                            p_inst_idx = block.instructions.index(pair_spill_inst_dict[inst_idx])
+                        for n_inst in block.instructions[inst_idx:p_inst_idx]:
                             if n_inst.flags.read_barrier != 0:
                                 b_tracker_list[n_inst.flags.read_barrier-1] = 'r'
                             if n_inst.flags.write_barrier != 0:
@@ -442,7 +452,7 @@ def opt_hoist_spill_instruction(program):
                             new_barrier = b_tracker_list.index('-') + 1
                             print("[SPINT_OPT]: Change read barrier of %s to %d" % (inst, new_barrier))
                             
-                            p_inst = block.instructions[pair_spill_inst_dict[inst_idx]]
+                            p_inst = pair_spill_inst_dict[inst_idx]
                             p_inst.flags.wait_barrier = p_inst.flags.wait_barrier & ~(1 << (inst.flags.read_barrier-1))
                             inst.flags.read_barrier = new_barrier
                             p_inst.flags.wait_barrier = p_inst.flags.wait_barrier | (1 << (inst.flags.read_barrier-1))
@@ -454,7 +464,11 @@ def opt_hoist_spill_instruction(program):
                     # there is no need to change.  
                     stall_count = 0
                     change_barrier = False
-                    for n_inst in block.instructions[inst_idx+1:pair_spill_inst_dict[inst_idx]]:                    
+                    p_inst_idx = -1
+                    if pair_spill_inst_dict[inst_idx]:
+                        p_inst_idx = block.instructions.index(pair_spill_inst_dict[inst_idx])
+
+                    for n_inst in block.instructions[inst_idx+1:p_inst_idx]:                    
                         if stall_count > SHARED_MEMORY_STALL:
                             break
                         
@@ -467,7 +481,11 @@ def opt_hoist_spill_instruction(program):
                         
                     if change_barrier:
                         b_tracker_list = copy.copy(b_tracker.barriers)
-                        for n_inst in block.instructions[inst_idx:pair_spill_inst_dict[inst_idx]]:
+                        p_inst_idx = -1
+                        if pair_spill_inst_dict[inst_idx]:
+                            p_inst_idx = block.instructions.index(pair_spill_inst_dict[inst_idx])
+                        
+                        for n_inst in block.instructions[inst_idx:p_inst_idx]:
                             if n_inst.flags.read_barrier != 0:
                                 b_tracker_list[n_inst.flags.read_barrier-1] = 'r'
                             if n_inst.flags.write_barrier != 0:
@@ -478,7 +496,7 @@ def opt_hoist_spill_instruction(program):
                             new_barrier = b_tracker_list.index('-') + 1
                             print("[SPINT_OPT]: Change write barrier of %s to %d" % (inst, new_barrier))
                             
-                            p_inst = block.instructions[pair_spill_inst_dict[inst_idx]]
+                            p_inst = pair_spill_inst_dict[inst_idx]
                             p_inst.flags.wait_barrier = p_inst.flags.wait_barrier & ~(1 << (inst.flags.write_barrier-1))
                             inst.flags.write_barrier = new_barrier
                             p_inst.flags.wait_barrier = p_inst.flags.wait_barrier | (1 << (inst.flags.write_barrier-1))
@@ -487,8 +505,8 @@ def opt_hoist_spill_instruction(program):
             b_tracker.update_flags(inst.flags)
             
             
-        pprint(pair_spill_inst_dict)
-        pprint(block.instructions)
+        #pprint(pair_spill_inst_dict)
+        #pprint(block.instructions)
     
     program.update()
                                         

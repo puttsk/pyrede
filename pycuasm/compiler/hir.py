@@ -119,14 +119,20 @@ class Instruction(object):
         if isinstance(reg, str):
             reg = Register(reg)
         
+        if self.opcode.type == 'x64':
+            reg_id = int(int(reg.name.replace('R','')) / 2) * 2
+            reg = Register('R%d' % reg_id)
+        
         if self.dest and self.dest == reg:
             return True
         
         for op in self.operands:
             if isinstance(op, Pointer):
-                return op.register == reg
+                if op.register == reg:
+                    return op.register == reg
             elif isinstance(op, Constant) and op.pointer:
-                return op.pointer.register == reg
+                if op.pointer.register == reg:
+                    return op.register == reg
             elif op == reg:
                 return True
         return False
