@@ -56,7 +56,7 @@ def analyse_register_accesses(program, register_list = None):
     
     return access_dict
     
-def generate_spill_candidates(program, exclude_registers=[]):
+def generate_spill_candidates(program, exclude_registers=[], priority='access'):
     print("[ANA_SPILL] Generating spilled register candidates. Excluding registers: %s" % exclude_registers)
     reg_64 = collect_non_32bit_registers(program)
     #reg_64 = collect_64bit_registers(program)
@@ -67,8 +67,10 @@ def generate_spill_candidates(program, exclude_registers=[]):
     interference_dict = analyse_register_interference(program, reg_candidates)
     access_dict = analyse_register_accesses(program, reg_candidates)
 
-    reg_candidates = sorted(reg_candidates, key=lambda x: access_dict[x]['read'] +  access_dict[x]['write'])
-    #reg_candidates = sorted(reg_candidates, key=lambda x: len(interference_dict[x]))
+    if property == 'access':
+        reg_candidates = sorted(reg_candidates, key=lambda x: access_dict[x]['read'] +  access_dict[x]['write'])
+    else:
+        reg_candidates = sorted(reg_candidates, key=lambda x: len(interference_dict[x]))
 
     return reg_candidates
     
@@ -205,7 +207,7 @@ def __get_function_reg_access_old(cfg, function_block):
         if not isinstance(block, BasicBlock):
             continue
         elif isinstance(block, CallBlock):
-            block_reg_access = __get_function_reg_access(cfg, cfg.function_blocks[block.target_function])
+            block_reg_access = __get_function_reg_access_old(cfg, cfg.function_blocks[block.target_function])
         else:            
             block_reg_access = block.register_access
             
@@ -216,10 +218,10 @@ def __get_function_reg_access_old(cfg, function_block):
                 reg_access[k] += block_reg_access[k]
 
         if getattr(block.taken, visit_tag, cur_level) < cur_level:
-            __update_loop_reg_access(cfg, block.taken, block)
+            __update_loop_reg_access_old(cfg, block.taken, block)
     
         if getattr(block.not_taken, visit_tag, cur_level) < cur_level:
-            __update_loop_reg_access(cfg, block.not_taken, block)
+            __update_loop_reg_access_old(cfg, block.not_taken, block)
     
     for block in traverse_order:
         delattr(block, visit_tag)
@@ -267,7 +269,7 @@ def generate_spill_candidates_cfg_old(program, cfg, exclude_registers=[]):
     # Assume that there is no calling loop, e.g. A calls B and B calls A
     
     for function in cfg.function_blocks:
-        __get_function_reg_access(cfg, cfg.function_blocks[function])
+        __get_function_reg_access_old(cfg, cfg.function_blocks[function])
         
     traverse_order = Cfg.generate_breadth_first_order(cfg.blocks[0])
     traverse_id = Cfg.get_traverse_id()
@@ -283,10 +285,10 @@ def generate_spill_candidates_cfg_old(program, cfg, exclude_registers=[]):
         setattr(block, visit_tag, cur_level)
     
         if getattr(block.taken, visit_tag, cur_level) < cur_level:
-            __update_loop_reg_access(cfg, block.taken, block)
+            __update_loop_reg_access_old(cfg, block.taken, block)
     
         if getattr(block.not_taken, visit_tag, cur_level) < cur_level:
-            __update_loop_reg_access(cfg, block.not_taken, block)
+            __update_loop_reg_access_old(cfg, block.not_taken, block)
     
     for block in traverse_order:
         delattr(block, visit_tag)

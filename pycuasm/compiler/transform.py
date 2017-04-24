@@ -952,11 +952,15 @@ def spill_local_memory(program, thread_block_size):
         # Collect all local load/store instructions
         if inst.opcode.name == "LDL":
             local_mem_ptr = inst.operands[0]
+            if local_mem_ptr.register.name != local_base_reg:
+                continue
             if local_mem_ptr.offset not in local_offset_list:
                 local_offset_list.append(local_mem_ptr.offset)
 
         if inst.opcode.name == "STL":
             local_mem_ptr = inst.operands[0]
+            if local_mem_ptr.register.name != local_base_reg:
+                continue
             if local_mem_ptr.offset not in local_offset_list:
                 local_offset_list.append(local_mem_ptr.offset)
                             
@@ -1035,7 +1039,7 @@ def spill_local_memory(program, thread_block_size):
         for inst in [x for x in program.ast if isinstance(x, Instruction)]:
             # Convert local load to shared load
             if inst.opcode.name == "LDL":
-                if local_shared_dict[inst.operands[0].offset] != None:
+                if inst.operands[0].offset in local_shared_dict and inst.operands[0].register == local_base_reg:
                     inst.opcode.name = "LDS"
                     inst.opcode.extension = []
                     inst.flags.yield_hint = False
@@ -1051,7 +1055,7 @@ def spill_local_memory(program, thread_block_size):
                     inst.operands[0].offset = local_shared_dict[inst.operands[0].offset]
 
             if inst.opcode.name == "STL":
-                if local_shared_dict[inst.operands[0].offset] != None:
+                if inst.operands[0].offset in local_shared_dict and inst.operands[0].register == local_base_reg:
                     inst.opcode.name = "STS"
                     inst.opcode.extension = []
                     inst.flags.yield_hint = False

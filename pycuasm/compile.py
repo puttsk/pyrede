@@ -19,7 +19,7 @@ from pycuasm.compiler.optimization import *
 
 from pycuasm.tool import *
 
-def compiler_program(program, args):
+def compile_program(program, args):
     # Check argument
     opt_level = args.opt_level
     
@@ -54,11 +54,20 @@ def compiler_program(program, args):
     
     if args.swap_spill_reg == 1:
         opt_swap_spill_reg = True
+        
+    if args.opt_access == 0:
+        opt_hoist_spill_inst = False
+        opt_remove_redundant_inst = False
+    
+    if args.opt_access == 1:
+        opt_hoist_spill_inst = True
+        opt_remove_redundant_inst = True
     
     register_relocation = True
     if args.no_register_relocation:
         register_relocation = False
     
+    print("[COMPILE]: Candidate Type: ", args.candidate_type)
     print("[COMPILE]: Optimization level: ", opt_level)
     print("[COMPILE]: Register conflict avoidance: ", opt_conflict_avoidance)
     print("[COMPILE]: Remove redundant spill instruction: ", opt_remove_redundant_inst)
@@ -77,9 +86,13 @@ def compiler_program(program, args):
         if args.exclude_registers:
             exclude_registers.append(args.exclude_registers)
         
-        reg_candidates = generate_spill_candidates_cfg(program, cfg, exclude_registers=exclude_registers)
-        cfg.create_dot_graph("cfg.dot")
-        #reg_candidates = generate_spill_candidates(program, exclude_registers=exclude_registers)
+        reg_candidates = []
+        if args.candidate_type == 0:
+            reg_candidates = generate_spill_candidates_cfg(program, cfg, exclude_registers=exclude_registers)
+        elif args.candidate_type == 1:
+            reg_candidates = generate_spill_candidates(program, exclude_registers=exclude_registers, priority='access')
+        elif args.candidate_type == 2:
+            reg_candidates = generate_spill_candidates(program, exclude_registers=exclude_registers, priority='conflict')
         pprint(reg_candidates)
         skipped_candidates = []
         interference_dict = analyse_register_interference(program, reg_candidates)
@@ -193,7 +206,7 @@ def compile(args):
     program.set_constants(sass.constants)
     program.set_header(sass.header)
     
-    compiler_program(program, args)
+    compile_program(program, args)
             
     program.save(args.output)
     return

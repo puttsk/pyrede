@@ -28,12 +28,15 @@ def main():
     parser.add_argument('--no-register-relocation', action='store_true', default=False, help="Disable register relocation after spilling")
     parser.add_argument('--avoid-conflict', type=int, default=2, help="0: Disable / 1:Enable register conflict avoidance")
     parser.add_argument('--swap-spill-reg', type=int, default=2, help="0: Disable / 1:Enable spill register swapping")
+    parser.add_argument('--opt-access', type=int, default=2, help="0: Disable / 1:Enable spill register swapping")
+    parser.add_argument('--candidate_type', type=int, default=0, help="0: CFG / 1:Static Access / 2: Static Conflict")
     
     # Debugging
     parser.add_argument('--cuobjdump', help="Specify an input cuobjdump file. For debugging purpose only when cuobjdume does not exist in the system.")
     
     # tuning
     parser.add_argument('--local-sass', type=str, help="SASS code with local spilling")
+    parser.add_argument('--local-sass-shared', type=str, help="SASS code with local spilling to shared")
     
     # Default argument
     parser.add_argument('input_file', type=str)
