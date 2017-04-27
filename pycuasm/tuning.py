@@ -28,6 +28,7 @@ GLOBAL_ACCESS_STALL = 200
 SHARED_ACCESS_STALL = 24
 
 DOUBLE_PRECISION_UNIT_RATIO_FACTOR = 32
+SPECIAL_FUNCTION_UNIT_RATIO_FACTOR = 4
 
 ProgramStatistic = namedtuple('ProgramStatistic', ['stall', 'inst_stat'])
 
@@ -222,13 +223,15 @@ def collect_program_statistic(program):
             if inst.opcode.type == 'x64':
                 inst_stat[inst_type].stall += inst.flags.stall * DOUBLE_PRECISION_UNIT_RATIO_FACTOR * program.occupancy
                 stall_count += inst.flags.stall * DOUBLE_PRECISION_UNIT_RATIO_FACTOR * program.occupancy
+            elif inst.opcode.type == 'qtr':
+                inst_stat[inst_type].stall += inst.flags.stall * SPECIAL_FUNCTION_UNIT_RATIO_FACTOR * program.occupancy
+                stall_count += inst.flags.stall * SPECIAL_FUNCTION_UNIT_RATIO_FACTOR * program.occupancy                        
             else:
                 inst_stat[inst_type].stall += inst.flags.stall
                 stall_count += inst.flags.stall
                 
             inst_stat[inst_type].visited += 1
                 
-            
             if inst.flags.read_barrier > 0:
                 #barrier[inst.flags.read_barrier] = [inst, inst.flags.stall]
                 barrier[inst.flags.read_barrier] = [inst, 0]

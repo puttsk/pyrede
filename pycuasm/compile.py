@@ -132,7 +132,7 @@ def compile_program(program, args):
             
             reg_candidates = sorted(reg_candidates, key=lambda x: access_dict[x]['read'] +  access_dict[x]['write'])
             spilled_count = spilled_count + 1        
-        
+        pprint(skipped_candidates)
         if opt_conflict_avoidance:
             max_spill_bank = 0
             max_spill_count = 0

@@ -7,6 +7,9 @@ from pycuasm.compiler.hir import *
 from pycuasm.compiler.analysis import *
 from pycuasm.compiler.utils import *
 
+GLOBAL_ACCESS_STALL = 200
+SHARED_ACCESS_STALL = 24
+
 class RelocatableRegister(object):
     def __init__(self, lead_register, bits=32 ):
         self.lead_register = lead_register
@@ -114,7 +117,7 @@ def relocate_registers_conflict(program):
         if not relocation_space[loc]:
             empty_location_list.append(loc)
     
-    pprint(relocation_space)
+    #pprint(relocation_space)
 
     empty_idx = 0
     print("[REG_RELOC] Empty localtion %s" % (empty_location_list))
@@ -483,7 +486,7 @@ def rename_register(program, old_reg, new_reg):
     print("[REG_RNAME] Renaming %s to %s" % (old_reg, new_reg))
     rename_registers(program, {old_reg.name:new_reg.name})
     
-def spill_register_to_shared(
+def spill_register_to_shared_orig(
         program, 
         target_register, 
         cfg=None,
@@ -713,6 +716,308 @@ def spill_register_to_shared(
     program.update()
     
 
+def __get_inst_barrier(barrier, exclude=0):
+    min_stall = GLOBAL_ACCESS_STALL+1
+    min_barrier = 0
+    
+    for i in range(1, 7):
+        if i == exclude:
+            continue
+        
+        if barrier[i]:
+            if barrier[i][0].opcode.type == 'lmem' or barrier[i][0].opcode.type == 'gmem':
+                if min_stall > GLOBAL_ACCESS_STALL - barrier[i][1]:
+                    min_stall = GLOBAL_ACCESS_STALL - barrier[i][1]
+                    min_barrier = i                      
+            elif barrier[i][0].opcode.type == 'smem':
+                if min_stall > SHARED_ACCESS_STALL - barrier[i][1]:
+                    min_stall = SHARED_ACCESS_STALL - barrier[i][1]
+                    min_barrier = i                      
+        else:
+            # barrier i is free
+            return i
+            
+    return min_barrier
+'''
+def __get_inst_barrier(barrier, exclude=0):
+    max_stall = 0
+    max_barrier = 0
+    
+    for i in range(1, 7):
+        if i == exclude:
+            continue
+        
+        if barrier[i]:
+            if barrier[i][0].opcode.type == 'lmem' or barrier[i][0].opcode.type == 'gmem':
+                if max_stall < GLOBAL_ACCESS_STALL - barrier[i][1]:
+                    max_stall = GLOBAL_ACCESS_STALL - barrier[i][1]
+                    max_barrier = i                      
+            elif barrier[i][0].opcode.type == 'smem':
+                if max_stall < SHARED_ACCESS_STALL - barrier[i][1]:
+                    max_stall = SHARED_ACCESS_STALL - barrier[i][1]
+                    max_barrier = i                      
+    
+    if max_barrier == 0:
+        for i in range(1, 7):
+            if not barrier[i]:
+                return i; 
+
+    return max_barrier
+'''
+
+def spill_register_to_shared(
+        program, 
+        target_register, 
+        cfg=None,
+        spill_register=Register('R0'), 
+        spill_register_addr=Register('R1'), 
+        thread_block_size=256, ):
+    """ Spill registers to shared memory 
+        
+        Args:
+            program (Program): target program for register spilling
+            spilled_register (Register): A register to be spilled  
+            cfg (Cfg): A CFG of the input program
+            thread_block_size (int): Size of thread block  
+    """
+    # TODO: Find free barrier for LDS Instruction
+    
+    is_2d_thread_block = False
+    
+    tid_reg = None
+    tid_inst = 0    
+    # If this is the first time a register is spilled to shared memory,
+    # add a new parameter to the program object for keeping track of register 
+    # spilling and add instruction to compute the base address for spilled 
+    # register
+    # ASSUME: 1D thread block
+    # TODO: Add support for 2d and 3d thread block
+    if not getattr(program, 'shared_spill_count', False):
+        tid_inst_copy = None
+        
+        # Add new parameter
+        setattr(program, 'shared_spill_count', 0)
+                
+        # Check if the kernel uses 2D thread block
+        for inst in program.ast:
+            if not isinstance(inst, Instruction):
+                continue
+            if inst.opcode.name == 'S2R':
+                # Look for S2R R19, SR_TID.X instruction.
+                if inst.operands[0].name == 'SR_TID' and 'Y' in inst.operands[0].extension:
+                    is_2d_thread_block = True
+                    break
+        
+        if is_2d_thread_block:
+            tid_x_inst = Instruction(Flags('--','-','1','-','6'), 
+                Opcode('S2R'), 
+                operands=[Register('R2'), Register('SR_TID.X', is_special=True)])
+            
+            tid_y_inst = Instruction(Flags('--','-','2','-','6'), 
+                Opcode('S2R'), 
+                operands=[Register('R3'), Register('SR_TID.Y', is_special=True)])
+            
+            block_dim_x_inst = Instruction(Flags('--','-','-','-','6'), 
+                Opcode('MOV'), 
+                operands=[Register('R4'), 'blockDimX'])
+            
+            tid_mad_inst = Instruction(Flags('03','-','-','-','6'), 
+                Opcode('XMAD'), 
+                operands=[Register('R2'), Register('R3'), Register('R4'), Register('R2')])
+            
+            base_addr_inst = Instruction(Flags('--','-','-','-','6'), 
+                Opcode('SHL'), 
+                operands=[spill_register_addr, Register('R2'), 0x02])
+
+            program.ast.insert(1, tid_x_inst)
+            program.ast.insert(2, tid_y_inst)
+            program.ast.insert(3, block_dim_x_inst)
+            program.ast.insert(4, tid_mad_inst)
+            program.ast.insert(5, base_addr_inst)
+        else:
+            tid_x_inst = Instruction(Flags('--','-','1','-','6'), 
+                Opcode('S2R'), 
+                operands=[Register('R2'), Register('SR_TID.X', is_special=True)])
+            
+            base_addr_inst = Instruction(Flags('01','-','-','-','6'), 
+                Opcode('SHL'), 
+                operands=[spill_register_addr, Register('R2'), 0x02])
+
+            program.ast.insert(1, tid_x_inst)
+            program.ast.insert(2, base_addr_inst)
+    
+    # Assign the spilled register Identifier
+    spill_reg_id = program.shared_spill_count
+    # Padding shared memory
+    #spill_offset = spill_reg_id * thread_block_size * 4 + int(math.ceil(program.shared_size/128))*128
+    # No Padding
+    spill_offset = spill_reg_id * thread_block_size * 4 + program.shared_size
+    program.shared_spill_count += 1
+    
+    print("[REG_SPILL] Replacing %s with shared memory %s[%s+%d] (TB:%d Offset:%d)" % (target_register,spill_register, spill_register_addr, spill_offset, thread_block_size,program.shared_size ))
+    
+    load_shr_inst = SpillLoadInstruction(Flags('--','1','2','-','6'), 
+                        Opcode('LDS'),
+                        operands=[spill_register, Pointer(spill_register_addr, spill_offset),
+                        ])
+    
+    # Add read barrier to make sure that the STS instruction is completed before next instreuction
+    store_shr_inst = SpillStoreInstruction(Flags('--','4','-','-','6'), 
+                        Opcode('STS'),
+                        operands=[Pointer(spill_register_addr, spill_offset), spill_register, 
+                        ])
+    
+    w_count = 0
+    r_count = 0
+    
+    #barrier_tracker = BarrierTracker()
+    barrier = [None] * 7
+    
+    for inst in program.ast:
+        # If instruction contain spilled_register, rename the spilled_register to spill_register.
+        # If the instruction read data from the spilled_register, load data in the shared memory 
+        # to spill_register just before the instruction. 
+        # If the instruction write data to the spilled_register, store data from spill_register 
+        # to shared memory right after the instruction.
+        if isinstance(inst, Label):
+            barrier = [None] * 7
+            continue
+        
+        if inst.opcode.name in ['BRA', 'CAL', 'JCAL']:
+            for i in range(7):
+                if barrier[i]:
+                    inst.flags.wait_barrier = inst.flags.wait_barrier | (1 << (i-1))
+            barrier = [None] * 7
+            
+        
+        inst_idx = program.ast.index(inst)
+        prev_idx = inst_idx-1
+        prev_inst = None
+        
+        if prev_idx > 0:
+            prev_inst = program.ast[prev_idx]
+            while not isinstance(prev_inst, Instruction):
+                prev_idx = prev_idx-1
+                prev_inst = program.ast[prev_idx]
+            
+        for op in inst.operands:
+            if isinstance(op, Pointer):
+                if target_register == op.register:
+                    r_count = r_count + 1
+                    # Load data from shared memory
+                    op.register.rename(spill_register)
+                    # Set the instruction that read still register to wait for shared memory read 
+                    shared_load_inst = copy.deepcopy(load_shr_inst)
+                    shared_load_inst.flags.read_barrier = __get_inst_barrier(barrier)
+                    shared_load_inst.flags.write_barrier = __get_inst_barrier(barrier, exclude=shared_load_inst.flags.read_barrier)
+                    inst.flags.wait_barrier = inst.flags.wait_barrier | (1 << (shared_load_inst.flags.read_barrier-1) | 1 << (shared_load_inst.flags.write_barrier-1))
+                    if isinstance(prev_inst, SpillStoreInstruction):
+                         shared_load_inst.flags.wait_barrier = shared_load_inst.flags.wait_barrier | 0x8
+                    shared_load_inst.condition = inst.condition              
+                    program.ast.insert(program.ast.index(inst), shared_load_inst)
+                    
+            elif isinstance(op, Register):
+                if target_register == op:
+                    r_count = r_count + 1
+                    # Read access
+                    inst.operands[inst.operands.index(op)].rename(spill_register)
+                    # Set the instruction that read spill register to wait for shared memory read
+                    shared_load_inst = copy.deepcopy(load_shr_inst)
+                    shared_load_inst.flags.read_barrier = __get_inst_barrier(barrier)
+                    shared_load_inst.flags.write_barrier = __get_inst_barrier(barrier, exclude=shared_load_inst.flags.read_barrier)
+                    inst.flags.wait_barrier = inst.flags.wait_barrier | (1 << (shared_load_inst.flags.read_barrier-1) | 1 << (shared_load_inst.flags.write_barrier-1))
+                    if isinstance(prev_inst, SpillStoreInstruction):
+                         shared_load_inst.flags.wait_barrier = shared_load_inst.flags.wait_barrier | 0x8
+                    shared_load_inst.condition = inst.condition 
+                    program.ast.insert(program.ast.index(inst), shared_load_inst)
+            elif isinstance(op, Constant) and op.pointer:
+                if target_register == op.pointer.register:
+                    r_count = r_count + 1
+                    # Load data from shared memory
+                    op.pointer.register.rename(spill_register)
+                    # Set the instruction that read still register to wait for shared memory read 
+                    shared_load_inst = copy.deepcopy(load_shr_inst)
+                    shared_load_inst.flags.read_barrier = __get_inst_barrier(barrier)
+                    shared_load_inst.flags.write_barrier = __get_inst_barrier(barrier, exclude=shared_load_inst.flags.read_barrier)
+                    inst.flags.wait_barrier = inst.flags.wait_barrier | (1 << (shared_load_inst.flags.read_barrier-1) | 1 << (shared_load_inst.flags.write_barrier-1))
+                    if isinstance(prev_inst, SpillStoreInstruction):
+                         shared_load_inst.flags.wait_barrier = shared_load_inst.flags.wait_barrier | 0x8 
+                    shared_load_inst.condition = inst.condition
+                    program.ast.insert(program.ast.index(inst), shared_load_inst)
+        
+        if isinstance(inst.dest, Pointer):
+            if target_register == inst.dest.register:
+                # Read access
+                r_count = r_count + 1
+                inst.dest.register.rename(spill_register)
+                # Set the instruction that read spill register to wait for shared memory read
+                shared_load_inst = copy.deepcopy(load_shr_inst)
+                shared_load_inst.flags.read_barrier = __get_inst_barrier(barrier)
+                shared_load_inst.flags.write_barrier = __get_inst_barrier(barrier, exclude=shared_load_inst.flags.read_barrier)
+                inst.flags.wait_barrier = inst.flags.wait_barrier | (1 << (shared_load_inst.flags.read_barrier-1) | 1 << (shared_load_inst.flags.write_barrier-1))
+                if isinstance(prev_inst, SpillStoreInstruction):
+                        shared_load_inst.flags.wait_barrier = shared_load_inst.flags.wait_barrier | 0x8
+                shared_load_inst.condition = inst.condition                    
+                program.ast.insert(program.ast.index(inst), shared_load_inst)
+        elif isinstance(inst.dest, Register):
+            if target_register == inst.dest:
+                # Write access
+                w_count = w_count + 1
+                st_inst = copy.deepcopy(store_shr_inst)
+                inst.dest.rename(spill_register)
+                
+                # Set wait flag if the previous instruction sets write dependence flag. 
+                # This will happen if the instruction store data in the spilled register.
+                # Add 1 additional cycle to the store instruction. 
+                if inst.flags.write_barrier != 0:
+                    st_inst.flags.wait_barrier = st_inst.flags.wait_barrier |( 1 << (inst.flags.write_barrier-1))
+                    if inst.flags.read_barrier != 0:
+                        st_inst.flags.wait_barrier = st_inst.flags.wait_barrier |( 1 << (inst.flags.read_barrier-1))
+                    inst.flags.stall = inst.flags.stall + 1
+                    #inst.flags.yield_hint = False
+                else:
+                    if(inst.opcode.grammar.type == 'gmem' or inst.opcode.grammar.type == 'smem'):
+                        inst.flags.write_barrier = __get_inst_barrier(barrier)
+                        st_inst.flags.wait_barrier = st_inst.flags.wait_barrier |( 1 << (inst.flags.write_barrier-1))
+                    elif (inst.opcode.name in ['RRO', 'MUFU']):
+                        inst.flags.write_barrier = __get_inst_barrier(barrier)
+                        st_inst.flags.wait_barrier = st_inst.flags.wait_barrier |( 1 << (inst.flags.write_barrier-1))
+                    
+                    # Disable dual issue
+                    if inst.flags.stall == 0:
+                        inst.flags.stall = 1
+                    if inst.flags.stall < 15:
+                        inst.flags.stall += 1 
+                        #inst.flags.stall = 13
+                    
+                    #inst.flags.yield_hint = False
+                st_inst.flags.read_barrier = __get_inst_barrier(barrier, exclude=st_inst.flags.write_barrier)
+                st_inst.condition = inst.condition
+                program.ast.insert(program.ast.index(inst) + 1, st_inst)
+                # Set wait flag of the next instruction to wait for store instruction to finish
+                inst_next = program.ast[program.ast.index(st_inst) + 1] 
+                if isinstance(inst_next, Instruction):
+                    inst_next.flags.wait_barrier = inst_next.flags.wait_barrier | (1 << (st_inst.flags.read_barrier -1))
+                    #if inst_next.flags.stall == 0:
+                    #    inst_next.flags.stall = 6
+        
+        # Update barrier status
+        if inst.flags.read_barrier > 0:
+            barrier[inst.flags.read_barrier] = [inst, 0]
+        
+        if inst.flags.write_barrier > 0:
+            barrier[inst.flags.write_barrier] = [inst, 0]
+        
+        for i in range(7):
+            if barrier[i]:
+                barrier[i][1] += inst.flags.stall
+                
+        for wait in inst.flags.wait_barrier_list:
+            if barrier[wait]:
+                barrier[wait] = None
+                                
+    print("[REG_SPILL] Read accesses: %d Write accesses: %d" % (r_count, w_count))   
+    program.update()
 
 def spill_64bit_register_to_shared(
         program, 

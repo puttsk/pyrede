@@ -391,9 +391,9 @@ def opt_hoist_spill_instruction(program):
                 block_idx =  block.instructions.index(inst)
                 p_block_idx = -1
                 p_block_inst = None
-                pprint(inst)
+                #pprint(inst)
                 for p_inst in block.instructions[block_idx+1:]:
-                    pprint(p_inst)
+                    #pprint(p_inst)
                     if p_inst.has_register(inst.spill_reg):
                         # Check if barrier match
                         inst_flags = 0
