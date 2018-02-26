@@ -7,10 +7,12 @@
 ### [COMPLETE RUN]
 + Ubuntu 14.04
 + CUDA 6.5
++ Python 3.4
 
 ### [COMPILE ONLY]
 + Ubuntu 16.04 
 + CUDA 6.5.14  
++ Python 3.5.2
 
 ## Running the Translator
 Uses command ./pyCuAsm.py to run the translator
