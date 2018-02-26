@@ -1,7 +1,11 @@
 # pyRede
 
 ## Requirement
-+ Python 3.4 
++ Python 3.4+
+
+## Tested Environment
++ Ubuntu 14.04
++ CUDA 6.5
 
 ## Running the Translator
 Uses command ./pyCuAsm.py to run the translator
