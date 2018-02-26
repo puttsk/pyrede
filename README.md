@@ -1,7 +1,7 @@
 # pyRede
 
 ## Requirement
-+ Python 3.4 
++ Python 3.4+
 
 ## Running the Translator
 Uses command ./pyCuAsm.py to run the translator
