@@ -68,5 +68,9 @@ optional arguments:
                         SASS code with local spilling to shared
 ```
 
+## Benchmarks
+
+`examples` directory contains benchmarks used in the register demotion paper. 
+
 # NOTES #
 * MaxAs does not work with CUDA 7.0 and newer version
