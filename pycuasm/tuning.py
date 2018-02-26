@@ -202,6 +202,24 @@ def __get_function_statistic(cfg, function_block):
     setattr(function_block, 'stall_count', stall_count)
     return inst_stat
 
+# Naive implementation
+def collect_program_statistic_naive(program):
+    cfg = Cfg(program)    
+    
+    inst_stat = {}
+    stall_count = 0
+    # Update instruction statistic of each cfg block
+    for block in cfg.blocks:
+        if not isinstance(block, BasicBlock):
+            continue
+        
+        barrier = [None] * 7
+        
+        for inst in [x for x in block.instructions if isinstance(x, Instruction)]:
+            stall_count = stall_count + inst.flags.stall
+
+    return ProgramStatistic(stall_count, inst_stat)
+
 def collect_program_statistic(program):
     cfg = Cfg(program)    
     # Update instruction statistic of each cfg block
@@ -384,6 +402,8 @@ def tuning(args):
         adjust_factor = adjust(program_occupancy[conf], 0.14088, -0.86281) / adjust(max_occupancy, 0.14088, -0.86281)
         #adjusted_stall = program_stat[conf].stall * 1.0/program_occupancy[conf] 
         adjusted_stall = program_stat[conf].stall * adjust_factor
+        # For naive approace
+        # adjusted_stall = program_stat[conf].stall 
         print ("%13s,%10d,%10.3f,%15.2f,%11d,%9d, %f" % (conf, program_stat[conf].stall, program_occupancy[conf], adjusted_stall, inst_count, dp_count, adjust_factor) )
         
     

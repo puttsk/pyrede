@@ -1,6 +1,7 @@
 import copy
 import itertools
 import math
+import operator
 
 from pprint import pprint
 from pycuasm.compiler.hir import *
@@ -53,7 +54,11 @@ class RelocatableRegister(object):
         return True
     
     def move(self, new_register):
+        if self.new_lead_register ==  new_register:
+            return
+            
         self.new_lead_register = new_register
+        self.new_registers = []
         if self.bits > 32:
             reg_count = int(self.bits / 32)
             #if new_register.id % reg_count != 0:
@@ -155,6 +160,8 @@ def relocate_registers_conflict(program):
                         
                         relocation_space[empty_loc] = relocation_space[i]
                         relocation_space[i] = None
+                        empty_location_list.append(i)
+                        empty_location_list = list(sorted(empty_location_list))
                         print("[REG_RELOC] Move R%d to R%d"  % (i, empty_loc))
                         relocation_space[empty_loc].move(Register('R%d' % empty_loc))
                         found_reg = True
@@ -176,8 +183,6 @@ def relocate_registers_conflict(program):
 
                 if non_conflict_loc:                    
                     non_conflict_idx = relocation_space.index(non_conflict_loc)
-                    #relocation_space[empty_loc] = copy.copy(relocation_space[non_conflict_idx])
-                    #relocation_space[empty_loc].move(Register('R%d' % (empty_loc)))
                     print("[REG_RELOC] Move %d-bit R%s to R%d - avoid conflict"  % (non_conflict_loc.bits, non_conflict_loc.lead_register, empty_loc))
                     for i in range(required_reg_count):
                         relocation_space[empty_loc + i] = relocation_space[non_conflict_idx + i]
@@ -188,7 +193,6 @@ def relocate_registers_conflict(program):
                     empty_loc = empty_loc + required_reg_count
                     cont_loc_count -= required_reg_count
                     empty_location_list = list(sorted(empty_location_list))
-                    #pprint(empty_location_list)
                 else:
                     required_reg_count = max(int(next_reg.bits / 32), 1)
                     if empty_loc % required_reg_count == 0:
@@ -221,13 +225,14 @@ def relocate_registers_conflict(program):
                         cont_loc_count += 1
 
     pprint(relocation_space)
-    has_empty_space = False
+    rename_dict = {}
     for reg_reloc in relocation_space:
         if not reg_reloc:
             has_empty_space = True
         if reg_reloc and reg_reloc.new_lead_register:
             for i in range(len(reg_reloc.new_registers)):
-                rename_register(program, reg_reloc.registers[i], reg_reloc.new_registers[i])
+                rename_dict[reg_reloc.registers[i].name] = reg_reloc.new_registers[i].name;             
+    rename_registers(program, rename_dict)
 
     program.update()
     if has_empty_space:
@@ -235,7 +240,7 @@ def relocate_registers_conflict(program):
 
 def relocate_registers(program):
     print("[REG_RELOC] Relocating registers.")
-    
+
     relocation_space_size = int(program.registers[-1].replace('R','')) + 1
     relocation_space = [None] * (relocation_space_size + 1)
     
@@ -302,55 +307,53 @@ def relocate_registers(program):
         while cont_loc_count > 0:
             # Get next register 
             next_reg = None
-            next_reg_loc = empty_loc 
+            next_reg_loc = empty_loc
+            #next_reg_loc = empty_loc + cont_loc_count
+            #next_reg = relocation_space[next_reg_loc]
             while not next_reg and next_reg_loc < len(relocation_space)-1:
                 next_reg_loc = next_reg_loc + 1
                 next_reg = relocation_space[next_reg_loc]
+                
             if not next_reg:
                 # End of list
                 break
 
-            if empty_loc % 2 == 1 and next_reg.bits > 32:
-                # The available register is odd register
-                # Only 32-bit register is allowed here
-                # Find 32-bit register from the back of reglocation_space
-                for i in reversed(range(len(relocation_space))):
-                    reg_reloc = relocation_space[i]
-                    if reg_reloc and reg_reloc.bits == 32 and i > empty_loc:
-                        relocation_space[empty_loc] = relocation_space[i]
-                        relocation_space[i] = None
-                        print("[REG_RELOC] Move R%d to R%d"  % (i, empty_loc))
-                        relocation_space[empty_loc].move(Register('R%d' % empty_loc))
-                        break
-                cont_loc_count = cont_loc_count - 1
-                # Move to next location
-                empty_loc = empty_loc + 1
-            else:
-                # The available register is even register
-                # Check if the next register is movable
-                required_reg_count = max(int(next_reg.bits / 32), 1)
-                if empty_loc % required_reg_count == 0:
-                    # The register is movable. Move register to empty location
-                    for i in range(required_reg_count):
-                        relocation_space[empty_loc + i] = relocation_space[next_reg_loc + i]
-                        relocation_space[next_reg_loc + i] = None
-                    print("[REG_RELOC] Move %d-bit R%d to R%d"  % (next_reg.bits, next_reg_loc, empty_loc))
-                    relocation_space[empty_loc].move(Register('R%d' % empty_loc))  
-                    # Move to next new empty space without reducing the size
-                    empty_loc = empty_loc + required_reg_count
-                else: 
-                    # TODO: The register is not movable
-                    possible_empty_loc = (int(math.floor(empty_loc / required_reg_count)) + 1) * required_reg_count
-                    # The register is movable. Move register to empty location
+            required_reg_count = max(int(next_reg.bits / 32), 1)
+            if empty_loc % required_reg_count == 0:
+                # The register can move to empty location
+                for i in range(required_reg_count):
+                    relocation_space[empty_loc + i] = relocation_space[next_reg_loc + i]
+                    relocation_space[next_reg_loc + i] = None
+                    relocation_space[empty_loc + i].move(Register('R%d' % empty_loc))
+                print("[REG_RELOC] Move %d-bit R%d to R%d"  % (next_reg.bits, next_reg_loc, empty_loc))
+                # Move to next new empty space without reducing the size
+                empty_loc = empty_loc + required_reg_count
+            else: 
+                possible_empty_loc = (int(math.floor(empty_loc / required_reg_count)) + 1) * required_reg_count
+                if possible_empty_loc < next_reg_loc:
+                    # Move to closest location
                     for i in range(required_reg_count):
                         relocation_space[possible_empty_loc + i] = relocation_space[next_reg_loc + i]
                         relocation_space[next_reg_loc + i] = None
-                    print("[REG_RELOC] Move %d-bit R%d to R%d"  % (next_reg.bits, next_reg_loc, possible_empty_loc))
-                    relocation_space[possible_empty_loc].move(Register('R%d' % possible_empty_loc))
-                    pprint(relocation_space)
-                    empty_loc = possible_empty_loc + required_reg_count
-                    #raise RuntimeError('[REG_RELOC] Register %s to %d is %d-bit and not movable' % (next_reg, empty_loc, required_reg_count * 32)) 
-            
+                        relocation_space[possible_empty_loc + i].move(Register('R%d' % possible_empty_loc))
+                    print("[REG_RELOC] Move2 %d-bit R%d to R%d"  % (next_reg.bits, next_reg_loc, possible_empty_loc))
+                    
+
+                # Create a swapping window
+                empty_space = possible_empty_loc - empty_loc
+                swap_loc = possible_empty_loc - required_reg_count
+                tmp_space = [None] * required_reg_count
+                for i in range(required_reg_count):
+                    tmp_space[i] = relocation_space[swap_loc + i]
+                    relocation_space[swap_loc + i] = relocation_space[possible_empty_loc + i]
+                    relocation_space[possible_empty_loc + i] = tmp_space[i]
+
+                    relocation_space[swap_loc + i].move(Register('R%d' % swap_loc))
+                    if relocation_space[possible_empty_loc + i] and (possible_empty_loc + i) % (relocation_space[possible_empty_loc + i].bits / 32) == 0:
+                        relocation_space[possible_empty_loc + i].move(Register('R%d' % (possible_empty_loc + i)))
+                print("[REG_RELOC] Swap %d-bit R%d to R%d"  % (next_reg.bits, possible_empty_loc, swap_loc))
+                empty_loc = possible_empty_loc + required_reg_count - empty_space
+
             if empty_location_list and empty_loc + cont_loc_count >= empty_location_list[0]:
                 # The current empty space merge with the next one.
                 # Update the size of empty space 
@@ -361,83 +364,12 @@ def relocate_registers(program):
             #pprint(relocation_space)
             #input("Press Enter to continue...")
     pprint(relocation_space)
+    rename_dict = {}
     for reg_reloc in relocation_space:
         if reg_reloc and reg_reloc.new_lead_register:
             for i in range(len(reg_reloc.new_registers)):
-                rename_register(program, reg_reloc.registers[i], reg_reloc.new_registers[i])
-
-def relocate_registers_old(program):
-    print("[REG_RELOC] Relocating registers.")
-    program_regs = sorted(program.registers, key=lambda x: int(x.replace('R','')))
-    #pprint(program_regs)
-    
-    #reg_mem =  collect_global_memory_access(program)
-    reg_mem = []
-    reg_64 = collect_64bit_registers(program)
-    exclude_64 = []
-    for reg in reg_64:
-        if abs(int(reg[0].replace('R','')) - int(reg[1].replace('R',''))) != 1:
-            exclude_64.append(reg)
-    reg_64 = set([x for x in reg_64 if x not in exclude_64])            
-    reg_64 = list(itertools.chain(*reg_64.union(reg_mem)))
-
-    idx = 0;
-    end = False
-    reg_skip = []  
-    
-    while not end: 
-        reg_cur = program_regs[idx]
-        reg_cur_id = int(reg_cur.replace('R',''))
-        reg_next = program_regs[idx+1]
-        reg_next_id = int(reg_next.replace('R',''))
-        
-        if reg_cur_id + 1 == reg_next_id:
-            idx = idx + 1
-        elif reg_next not in reg_64:
-            if len(reg_skip) != 0:
-                reg_next_new = reg_skip.pop()
-                reg_next_new_id = int(reg_next_new.replace('R',''))
-                rename_register(program, Register(reg_next), Register(reg_next_new))
-                program_regs[reg_next_new_id] = reg_next_new
-                program_regs[idx+1] = reg_cur
-                idx = idx + 1
-            else:
-                reg_next_new_id = reg_cur_id + 1
-                reg_next_new = 'R%d' % reg_next_new_id
-                rename_register(program, Register(reg_next), Register(reg_next_new))
-                program_regs[idx+1] = reg_next_new
-                idx = idx + 1
-        else:
-            # reg_next is a 64-bit register
-            reg_next_new_id = reg_cur_id + 1
-            reg_next_new = 'R%d' % reg_next_new_id
-            if reg_next_new_id % 2 == 0:
-                # The available register is an even register. 
-                # The 64-bit register can be move without any problem
-                # Move both 64-bit registers together
-                rename_register(program, Register(reg_next), Register(reg_next_new))
-                rename_register(program, Register(program_regs[idx+2]), Register('R%d' % (reg_next_new_id+1)))
-                program_regs[idx+1] = reg_next_new
-                program_regs[idx+2] = 'R%d' % (reg_next_new_id+1)
-                idx = idx + 2
-            else:
-                # The available register is an odd register.
-                # The 64-bit register cannot be start with an odd register. 
-                # Stores the odd register in reg_skip list and move to the next register
-                #if reg_next_new not in reg_64:
-                reg_skip.append(reg_next_new)
-                if reg_next_new_id != reg_next_id:
-                    rename_register(program, Register(reg_next), Register('R%d' % (reg_next_new_id+1)))
-                    rename_register(program, Register('R%d' % (reg_next_id+1)), Register('R%d' % (reg_next_new_id+2)))
-                    program_regs[idx+1] = 'R%d' % (reg_next_new_id+1)
-                    program_regs[idx+2] = 'R%d' % (reg_next_new_id+2)
-                    idx = idx + 2
-                else:
-                    idx = idx + 2
-
-        if idx == len(program_regs)-1:
-            end = True
-    
+                rename_dict[reg_reloc.registers[i].name] = reg_reloc.new_registers[i].name;             
+    rename_registers(program, rename_dict)
 
 def rename_registers_inst(instructions, registers_dict, update_dest = True):
     for inst in instructions:
@@ -1245,10 +1177,11 @@ def spill_64bit_register_to_shared(
     print("[REG_SPILL] Read accesses: %d Write accesses: %d" % (r_count, w_count))   
     program.update()
 
-def spill_local_memory(program, thread_block_size):
+def spill_local_memory(program, thread_block_size): 
     print("[LOCAL_SPILL]")
     local_base_reg = None
     local_offset_list = []
+    local_offset_count = {}
     for inst in [x for x in program.ast if isinstance(x, Instruction)]:
         # Collect register with local memory base address
         if inst.opcode.name == "MOV" and inst.operands[0].name == "c[0x0][0x20]":
@@ -1261,6 +1194,9 @@ def spill_local_memory(program, thread_block_size):
                 continue
             if local_mem_ptr.offset not in local_offset_list:
                 local_offset_list.append(local_mem_ptr.offset)
+                local_offset_count[local_mem_ptr.offset] = 1
+            else:
+                local_offset_count[local_mem_ptr.offset] += 1
 
         if inst.opcode.name == "STL":
             local_mem_ptr = inst.operands[0]
@@ -1268,16 +1204,43 @@ def spill_local_memory(program, thread_block_size):
                 continue
             if local_mem_ptr.offset not in local_offset_list:
                 local_offset_list.append(local_mem_ptr.offset)
-                            
+                local_offset_count[local_mem_ptr.offset] = 1
+            else:
+                local_offset_count[local_mem_ptr.offset] += 1
+
+
+    local_offset_list = sorted(local_offset_list, key=lambda x: int(str(x), 16), reverse=True)
+    #sorted_local_offset = sorted(local_offset_count.items(), key=operator.itemgetter(1), reverse=False)
+    #local_offset_list = [x[0] for x in sorted_local_offset[0:12]]
+    
+    #For CFD benchmark
+    # print(local_offset_list.pop(15))
+    # print(local_offset_list.pop(13))
+    # print(local_offset_list.pop(9))
+    # print(local_offset_list.pop(8))
+    # print(local_offset_list.pop(6))
+    # print(local_offset_list.pop(4))
+    # print(local_offset_list.pop(1))
+    # local_offset_list = local_offset_list[0:12]
+    # pprint(local_offset_list)
+        
+    #For QTC benchmark
+    #print(local_offset_list.pop(8))
+    #print(local_offset_list.pop(7))
+    #local_offset_list = local_offset_list[0:10]
+
     print("[LOCAL_SPILL] Local Memory Base Address Register: %s" % local_base_reg)
     print("[LOCAL_SPILL] Local Memory Base Address Offsets: %s" % local_offset_list)
     print("[LOCAL_SPILL] Shared Memory Location Needed: %d" % len(local_offset_list))
     print("[LOCAL_SPILL] Threadblock Size: %d" % thread_block_size)
+    #pprint(sorted_local_offset)
+
+    barrier = [None] * 7
 
     if len(local_offset_list) > 0:
 
         is_2d_thread_block = False
-        spill_register_addr = Register('R55')
+        spill_register_addr = Register('R70')
 
         # Check if the kernel uses 2D thread block
         for inst in program.ast:
@@ -1342,6 +1305,17 @@ def spill_local_memory(program, thread_block_size):
 
         # Convert local load/store to shared load/store
         for inst in [x for x in program.ast if isinstance(x, Instruction)]:
+            if isinstance(inst, Label):
+                barrier = [None] * 7
+                continue
+            
+            if inst.opcode.name in ['BRA', 'CAL', 'JCAL']:
+                for i in range(7):
+                    if barrier[i]:
+                        inst.flags.wait_barrier = inst.flags.wait_barrier | (1 << (i-1))
+                barrier = [None] * 7
+
+
             # Convert local load to shared load
             if inst.opcode.name == "LDL":
                 if inst.operands[0].offset in local_shared_dict and inst.operands[0].register == local_base_reg:
@@ -1350,12 +1324,14 @@ def spill_local_memory(program, thread_block_size):
                     inst.flags.yield_hint = False
                     inst.flags.stall = 6
                     if inst.flags.read_barrier == 0:
-                        inst.flags.read_barrier = 1
+                        inst.flags.read_barrier = __get_inst_barrier(barrier)
                     if inst.flags.write_barrier == 0:
-                        inst.flags.write_barrier = 6
+                        inst.flags.write_barrier = __get_inst_barrier(barrier)
+
                     inst_next = program.ast[program.ast.index(inst)+1]
-                    inst_next.flags.wait_barrier = inst_next.flags.wait_barrier | (1 << (inst.flags.read_barrier -1))
-                    inst_next.flags.wait_barrier = inst_next.flags.wait_barrier | (1 << (inst.flags.write_barrier -1))
+                    if inst_next.opcode.name != "DEPBAR":
+                        inst_next.flags.wait_barrier = inst_next.flags.wait_barrier | (1 << (inst.flags.read_barrier -1))
+                        inst_next.flags.wait_barrier = inst_next.flags.wait_barrier | (1 << (inst.flags.write_barrier -1))
                     inst.operands[0].register = spill_register_addr
                     inst.operands[0].offset = local_shared_dict[inst.operands[0].offset]
 
@@ -1366,10 +1342,27 @@ def spill_local_memory(program, thread_block_size):
                     inst.flags.yield_hint = False
                     inst.flags.stall = 6
                     if inst.flags.read_barrier == 0:
-                        inst.flags.read_barrier = 1
+                        inst.flags.read_barrier = __get_inst_barrier(barrier)
+                    
                     inst_next = program.ast[program.ast.index(inst)+1]
-                    inst_next.flags.wait_barrier = inst_next.flags.wait_barrier | (1 << (inst.flags.read_barrier -1))
+                    if inst_next.opcode.name != "DEPBAR":
+                        inst_next.flags.wait_barrier = inst_next.flags.wait_barrier | (1 << (inst.flags.read_barrier -1))
                     inst.operands[0].register = spill_register_addr
                     inst.operands[0].offset = local_shared_dict[inst.operands[0].offset]
-        
+
+            # Update barrier status
+            if inst.flags.read_barrier > 0:
+                barrier[inst.flags.read_barrier] = [inst, 0]
+            
+            if inst.flags.write_barrier > 0:
+                barrier[inst.flags.write_barrier] = [inst, 0]
+            
+            for i in range(7):
+                if barrier[i]:
+                    barrier[i][1] += inst.flags.stall
+                    
+            for wait in inst.flags.wait_barrier_list:
+                if barrier[wait]:
+                    barrier[wait] = None
+
         program.update()
