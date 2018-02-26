@@ -86,5 +86,6 @@ optional arguments:
   
   ```
   /usr/include/string.h: In function ‘void* __mempcpy_inline(void*, const void*, size_t)’:
+  
   /usr/include/string.h:652:42: error: ‘memcpy’ was not declared in this scope
   ```
