@@ -1,3 +1,6 @@
 __pycache__
 .vscode
 *.pyc
+parser.out
+parsetab.py
+.DS_Store
