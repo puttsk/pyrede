@@ -132,7 +132,7 @@ def tune_occupancy(program, register_size, shared_size, threadblock_size):
         
     return config
 
-def __update_loop_statistic(cfg, loop_begin, loop_end, inst_stat, update_factor = 20):
+def __update_loop_statistic(cfg, loop_begin, loop_end, inst_stat, update_factor = 10):
     traverse_order = Cfg.generate_breadth_first_order(loop_begin, loop_end)
     
     if getattr(loop_begin, 'visited_source', False):
