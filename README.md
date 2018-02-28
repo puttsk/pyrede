@@ -81,7 +81,7 @@ optional arguments:
 
 # NOTES #
 * MaxAs does not work with CUDA 7.0 and newer version
-* All results in the paper was run on Ubuntu 14.04 with CUDA 6.5
+* All results in the paper was run on Ubuntu 14.04 with CUDA 6.5 and compiled without `-D_FORCE_INLINES` compiler flag
 * Compiler flag `-D_FORCE_INLINES` was added to all benchmarks Makefile to make the benchmarks compilable on Ubuntu 16.04. 
   See. https://github.com/BVLC/caffe/issues/4046 for original discussion. 
   Following is the error message without `-D_FORCE_INLINES`
